@@ -1,0 +1,12 @@
+# STM32CubeIDE build outputs
+Debug/
+Release/
+*.o
+*.d
+*.map
+*.su
+*.cyclo
+*.list
+
+# STM32CubeIDE workspace metadata
+.metadata/
