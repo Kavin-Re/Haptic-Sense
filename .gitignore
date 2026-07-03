@@ -14,3 +14,7 @@ Release/
 # Vendored NPU runtime (68 MB binary lib) — kept on disk for the build,
 # not tracked in git history
 firmware/Lib/AI_Runtime/
+
+# Vendored ST HAL/CMSIS/BSP package (94 MB) — kept on disk for the build,
+# not tracked in git history
+firmware/STM32Cube_FW_N6/
