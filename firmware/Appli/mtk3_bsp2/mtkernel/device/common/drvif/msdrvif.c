@@ -11,6 +11,9 @@
  *----------------------------------------------------------------------
  */
 
+/*
+ * Modified 2026-07-04: Kmalloc/Kfree -> static pool (haptic-sense)
+ */
 
 /*
  *	msdrvif.c
@@ -20,6 +23,38 @@
 
 #include <tk/tkernel.h>
 #include "msdrvif.h"
+
+/* ------------------------------------------------------------------------ */
+/*
+ * Static T_MSDI pool
+ *
+ * Static pool replaces Kmalloc/Kfree to keep USE_IMALLOC=0 (no kernel
+ * dynamic allocation) per project static-buffers-only requirement.
+ * Sized to CNF_MAX_REGDEV (kernel-enforced device cap).
+ */
+LOCAL T_MSDI	knl_msdi_pool[CNF_MAX_REGDEV];
+LOCAL BOOL	knl_msdi_used[CNF_MAX_REGDEV];
+
+LOCAL T_MSDI *msdi_pool_alloc(void)
+{
+	INT	i;
+
+	for ( i = 0; i < CNF_MAX_REGDEV; i++ ) {
+		if ( !knl_msdi_used[i] ) {
+			knl_msdi_used[i] = TRUE;
+			return &knl_msdi_pool[i];
+		}
+	}
+	return NULL;		/* same NULL-on-exhaustion contract as Kmalloc */
+}
+
+LOCAL void msdi_pool_free(T_MSDI *msdi)
+{
+	INT	idx = (INT)(msdi - knl_msdi_pool);
+
+	if ( idx < 0 || idx >= CNF_MAX_REGDEV ) return;	/* not from this pool: no-op */
+	knl_msdi_used[idx] = FALSE;
+}
 
 /* ------------------------------------------------------------------------ */
 /*
@@ -135,7 +170,7 @@ EXPORT ER msdi_def_dev( T_DMSDI *dmsdi, T_IDEV *idev, T_MSDI **p_msdi )
 	ER	err;
 
 	/* Create "SDI"*/
-	msdi = Kmalloc(sizeof(T_MSDI));
+	msdi = msdi_pool_alloc();
 	if ( msdi == NULL ) {
 		err = E_NOMEM;
 		goto err_ret1;
@@ -173,7 +208,7 @@ EXPORT ER msdi_def_dev( T_DMSDI *dmsdi, T_IDEV *idev, T_MSDI **p_msdi )
 err_ret3:
 	DeleteLock(&msdi->lock);
 err_ret2:
-	Kfree(msdi);
+	msdi_pool_free(msdi);
 err_ret1:
 	return err;
 }
@@ -189,7 +224,7 @@ EXPORT ER msdi_del_dev( T_MSDI *msdi )
 	err = tk_def_dev(msdi->dmsdi.devnm, NULL, NULL);
 	if ( err > E_OK ) {
 		DeleteLock(&msdi->lock);	/* Delete the lock for exclusive access control */
-		Kfree(msdi);			/* Delete "SDI" */
+		msdi_pool_free(msdi);		/* Delete "SDI" */
 		err = E_OK;
 	}
 	return err;
