@@ -10,3 +10,7 @@ Release/
 
 # STM32CubeIDE workspace metadata
 .metadata/
+
+# Vendored NPU runtime (68 MB binary lib) — kept on disk for the build,
+# not tracked in git history
+firmware/Lib/AI_Runtime/
