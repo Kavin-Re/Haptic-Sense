@@ -73,6 +73,9 @@ NPU-managed buffers are covered by the `--cache-maintenance` flag in `user_neura
 - DWT method in firmware: `DWT->CYCCNT`; cycles / 600000 = ms at 600 MHz.
 - Terminology: never write "zero-latency" anywhere. Use "deterministic sub-millisecond latency (< 1 ms, hardware-verified)".
 
+### I2C driver status (CRITICAL — verify before first I2C code, verified 2026-07-04)
+The µT-Kernel STM32 I2C driver (`sysdepend/stm32_cube/device/hal_i2c/hal_i2c.c`) is currently **GATED OFF** by `DEVCNF_USE_HAL_IIC=0` in `config_bsp/stm32_cube/config_bsp.h:40` — it is inert / not in the built image. Haptic-sense's Priority 3 sensor task **REQUIRES** I2C1 (VL53L1X 0x29, MPU6050 0x68, DRV2605L 0x5A), so `DEVCNF_USE_HAL_IIC` must be flipped to `1` when bringing up the I2C peripheral. `hal_i2c.c` already has a correct static-fallback `#else` branch for `TK_SUPPORT_MEMLIB=0` (`dev_i2c_cb` static array), so enabling it should need NO Kmalloc patch — but re-verify the `#else` path compiles clean under `USE_IMALLOC=0` after flipping the flag.
+
 ## 4. BOOT & SIGNING (RED ZONE #1 — silent failure mode)
 
 Flash order (strict): `ai_fsbl.hex @ 0x70000000` → `network_data.hex @ 0x70380000` (model weights) → `*-Trusted.bin @ 0x70100000` (application). External loader: `MX66UW1G45G_STM32N6570-DK.stldr` (verified from `Appli/STM32N6_MTK_Person_Detection_Appli.launch` + ST docs 2026-07-03).
@@ -88,6 +91,7 @@ Flash order (strict): `ai_fsbl.hex @ 0x70000000` → `network_data.hex @ 0x70380
 ## 5. REFERENCE REPO — `~/Github_projects/Reference Projects/STM32N6_Survivor_Detection`
 
 Copy wholesale (do NOT reinvent): `Appli/mtk3_bsp2/` (µT-Kernel BSP2 port) · `Appli/STM32N657X0HXQ_LRUN.ld` · `Binaries/ai_fsbl.hex` · `Lib/AI_Runtime/` (LL_ATON) · `Model/STM32N6570-DK/user_neuralart.json` · `generate-n6-model.sh` · `serial_protocol.h`.
+- **PATCHED**: `mtk3_bsp2/mtkernel/device/common/drvif/msdrvif.c` has a local static-pool patch (commit `7a91f51`) replacing `Kmalloc`/`Kfree` with a fixed `T_MSDI[CNF_MAX_REGDEV]` pool, to preserve `USE_IMALLOC=0`. Do NOT revert or re-copy this file from the reference repo. All 16 other `Kmalloc`/`Kfree` call sites in the tree (`ser.c`, `i2c.c`, `adc.c`, `hal_i2c.c`, `hal_adc.c`, vendor `hal_*` variants) are verified dead code in this build — gated off by `USE_SDEV_DRV=0`, `DEVCNF_USE_HAL_IIC=0`, `DEVCNF_USE_HAL_ADC=0`, or undefined `MTKBSP_*` macros — so no other patch is needed for this build.
 - `user_neuralart.json` options string (verbatim from repo file — **copy verbatim, never hand-edit**): `--enable-epoch-controller -O3 --all-buffers-info --mvei --cache-maintenance --Oalt-sched --native-float --enable-virtual-mem-pools --Omax-ca-pipe 4 --Ocache-opt --Os`
 - `-O3` + `--Os` coexistence is ST's own default N6 profile (verified against ST Edge AI docs 2026-07-03, both appear in ST's official stedgeai output) — not an error.
 - Version note: recent ST Edge AI Core releases removed `--mvei` (now auto-derived from `--target`); if the installed ST Edge AI Core rejects it, delete only `--mvei` and keep all other flags.
@@ -109,14 +113,14 @@ Fallback BSP: official tron-forum/mtk3_bsp2 **v1.00.04 (May 2026) officially sup
 - No dynamic allocation, no malloc, minimal footprint. Static buffers only.
 - Every code block: language tag, target file path, task context + TK_PRI.
 - `#ifdef DEBUG_TIMING` around all DWT/GPIO instrumentation.
-- Licensing: own `.c/.h` = Apache 2.0 with SPDX header on each file. `mtk3_bsp2/` = T-License 2.1 (per actual file headers, verified 2026-07-03). `AI_Runtime/`, `STM32Cube_FW_N6/` = ST SLA. Never mix headers.
+- Licensing: own `.c/.h` = Apache 2.0 with SPDX header on each file. `mtk3_bsp2/` files are T-License 2.1 OR 2.2 depending on the individual file header — check each file's header, do not assume. Verified: `msdrvif.c` is T-License 2.2 (and was modified per §5, header preserved); `discovery_stm32n657` sysdef files are 2.1. `AI_Runtime/`, `STM32Cube_FW_N6/` = ST SLA. Never mix headers.
 
 ## 8. RED ZONES — current status
 
 | # | Zone | Status |
 |---|---|---|
-| 1 | FSBL signing pipeline | OPEN — first firmware action |
-| 2 | Toolchain versions | OPEN — verify before anything |
+| 1 | FSBL signing pipeline | Signing VERIFIED 2026-07-03: signed `-Trusted.bin` produced, `-align` present, correct tool path. Flashing to board still pending |
+| 2 | Toolchain versions | VERIFIED: STM32CubeIDE 2.2.0, STM32CubeProgrammer 2.23.0, both N6-capable, build succeeds |
 | 3 | <1 ms preemption measurement | instrument from Day 1; LA verified via sigrok scan |
 | 4 | Inference-buffer race | pattern defined (§3) — implement before task bodies |
 | 5 | ML scope creep | Edge Impulse only; feature vector locked (§6) |
