@@ -18,7 +18,7 @@
 #include "main.h"
 #include <assert.h>
 
-#include "app_heartbeat.h"
+#include "app_tasks.h"
 #include "app_config.h"
 #include "app_fuseprogramming.h"
 #include "npu_cache.h"
@@ -150,7 +150,7 @@ static void main_thread_fct(INT stacd, void *exinf)
   LL_MISC_EnableClockLowPower(~0);
 
   SERIAL_MSG(LEVEL_INFO, MODULE_INIT, EVENT_SYSTEM_READY);
-  heartbeat_run();	/* Phase 3: reference app_run() excluded from build */
+  app_tasks_run();	/* Phase 4: four-task architecture (Phase 3 heartbeat_run excluded) */
 
   SERIAL_MSG(LEVEL_INFO, MODULE_INIT, "APP_EXIT");
   tk_ext_tsk();
