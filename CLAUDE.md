@@ -4,6 +4,8 @@ AI-driven predictive spatial-awareness wearable for visually impaired users.
 Hard deadline: **September 25, 2026**. Benchtop prototype is the deliverable — NOT a wearable enclosure.
 Developer: solo BTech student, **zero prior experience** in RTOS, ML training, FSBL/TrustZone boot, NPU deployment. Explain new µT-Kernel concepts with a FreeRTOS/real-world analogy first, then the exact API, then where the same pattern appears in the reference repo.
 
+**PHASE STATUS (2026-07-05):** Phase 3 COMPLETE, verified on hardware — minimal LED+UART heartbeat (commit `7a87671`) runs from Flash Boot. UART shows `[HB]` counter at steady ~503 ms period (500 ms `tk_slp_tsk` + overhead) over 27+ samples; `tk_get_otm()` uptime monotonic and sane; no `[CAMERA_INIT]` in the boot trace (camera-pipeline strip confirmed; binary 682 KB → 63 KB). `DEVCNF_USE_HAL_IIC` still `0` — the flip to `1` is the FIRST action of Phase 5.
+
 ---
 
 ## 1. TARGET & TOOLCHAIN (verify before first build)
@@ -30,6 +32,9 @@ Developer: solo BTech student, **zero prior experience** in RTOS, ML training, F
 
 ### Arduino header pin map (subset in use)
 D15/PH9=SCL · D14/PC1=SDA · D8/PE7=DRV_EN · D7/PD6=**TIMING_D1** · D4/PH5=**TIMING_D0** · D3/PE9=IMU_INT · D2/PD0=TOF_INT
+
+### Onboard LED (HARDWARE-CONFIRMED 2026-07-05, Phase 3)
+LD1 = **PO1, active HIGH**. Port O carries XSPI1 (PSRAM) on PO0/PO2/PO3/PO4 — the memory the app executes from. **Configure ONLY PO1, pin-masked calls only**: `HAL_GPIO_Init` (masked RMW) + `HAL_GPIO_TogglePin` (atomic BSRR) confirmed working on hardware with XSPI1 untouched. Never `GPIO_PIN_All` / port-wide writes on port O. Verified against source: `__HAL_RCC_GPIOO_CLK_ENABLE()` exists (`stm32n6xx_hal_rcc.h:981`); `GPIOO` resolves to secure alias `GPIOO_S` (correct for this TrustZone build). LD2 (red, PG10, active LOW) may indicate BOOTFAILEDN — leave untouched.
 
 ### Actuator
 ERM coin 10 mm × 3.4 mm (3 V class) driven ONLY through DRV2605L. **NEVER connect any motor to GPIO directly** — GPIO abs max ~20 mA, ERM draws 60–90 mA. Priority 1 task touches EN/GPIO only; DRV2605L I2C configuration happens at init from the Priority 3 task context.
@@ -74,7 +79,7 @@ NPU-managed buffers are covered by the `--cache-maintenance` flag in `user_neura
 - Terminology: never write "zero-latency" anywhere. Use "deterministic sub-millisecond latency (< 1 ms, hardware-verified)".
 
 ### I2C driver status (CRITICAL — verify before first I2C code, verified 2026-07-04)
-The µT-Kernel STM32 I2C driver (`sysdepend/stm32_cube/device/hal_i2c/hal_i2c.c`) is currently **GATED OFF** by `DEVCNF_USE_HAL_IIC=0` in `config_bsp/stm32_cube/config_bsp.h:40` — it is inert / not in the built image. Haptic-sense's Priority 3 sensor task **REQUIRES** I2C1 (VL53L1X 0x29, MPU6050 0x68, DRV2605L 0x5A), so `DEVCNF_USE_HAL_IIC` must be flipped to `1` when bringing up the I2C peripheral. `hal_i2c.c` already has a correct static-fallback `#else` branch for `TK_SUPPORT_MEMLIB=0` (`dev_i2c_cb` static array), so enabling it should need NO Kmalloc patch — but re-verify the `#else` path compiles clean under `USE_IMALLOC=0` after flipping the flag.
+The µT-Kernel STM32 I2C driver (`sysdepend/stm32_cube/device/hal_i2c/hal_i2c.c`) is currently **GATED OFF** by `DEVCNF_USE_HAL_IIC=0` in `config_bsp/stm32_cube/config_bsp.h:40` — it is inert / not in the built image. Haptic-sense's Priority 3 sensor task **REQUIRES** I2C1 (VL53L1X 0x29, MPU6050 0x68, DRV2605L 0x5A), so `DEVCNF_USE_HAL_IIC` must be flipped to `1` when bringing up the I2C peripheral. `hal_i2c.c` already has a correct static-fallback `#else` branch for `TK_SUPPORT_MEMLIB=0` (`dev_i2c_cb` static array), so enabling it should need NO Kmalloc patch — but re-verify the `#else` path compiles clean under `USE_IMALLOC=0` after flipping the flag. Re-verified still `0` through Phase 3 (2026-07-05); the flip is the FIRST action of Phase 5.
 
 ## 4. BOOT & SIGNING (RED ZONE #1 — silent failure mode)
 
@@ -113,19 +118,20 @@ Fallback BSP: official tron-forum/mtk3_bsp2 **v1.00.04 (May 2026) officially sup
 - No dynamic allocation, no malloc, minimal footprint. Static buffers only.
 - Every code block: language tag, target file path, task context + TK_PRI.
 - `#ifdef DEBUG_TIMING` around all DWT/GPIO instrumentation.
+- `tm_printf` format support is LIMITED to `%d`/`%u`/`%x`/`%s` (`libtm_printf.c`) — **no `%lu`**; print 32-bit values with `%u` and a `UW` cast. Verified against source 2026-07-04.
 - Licensing: own `.c/.h` = Apache 2.0 with SPDX header on each file. `mtk3_bsp2/` files are T-License 2.1 OR 2.2 depending on the individual file header — check each file's header, do not assume. Verified: `msdrvif.c` is T-License 2.2 (and was modified per §5, header preserved); `discovery_stm32n657` sysdef files are 2.1. `AI_Runtime/`, `STM32Cube_FW_N6/` = ST SLA. Never mix headers.
 
 ## 8. RED ZONES — current status
 
 | # | Zone | Status |
 |---|---|---|
-| 1 | FSBL signing pipeline | Signing VERIFIED 2026-07-03: signed `-Trusted.bin` produced, `-align` present, correct tool path. Flashing to board still pending |
+| 1 | FSBL signing pipeline | RESOLVED 2026-07-05: full chain verified on hardware — FSBL → signed app @ 0x70100000, Flash Boot, Phase 3 heartbeat running (`-align` present, correct tool path) |
 | 2 | Toolchain versions | VERIFIED: STM32CubeIDE 2.2.0, STM32CubeProgrammer 2.23.0, both N6-capable, build succeeds |
 | 3 | <1 ms preemption measurement | instrument from Day 1; LA verified via sigrok scan |
 | 4 | Inference-buffer race | pattern defined (§3) — implement before task bodies |
 | 5 | ML scope creep | Edge Impulse only; feature vector locked (§6) |
 | 6 | NPU silent CPU fallback | FC/ReLU/Sigmoid only |
-| 7 | Task priorities free | VERIFIED 2026-07-03: reference app uses TK_PRI 10/11/14/14, priorities 1–3 confirmed free |
+| 7 | Task priorities free | PRE-WORK DONE 2026-07-05: priorities 1/2/3/10 verified free (`config.h:27`, range 1–32; heartbeat=10, main_thread=15). Wrinkle: kernel inittask is created at TK_PRI 1 (`inittask.h:26`), runs `usermain()`, then parks forever on `tk_slp_tsk(TMO_FEVR)` (`main.c:107`) — permanently dormant, never preempts; µT-Kernel allows multiple tasks per priority, so the Phase 4 Hazard task at TK_PRI 1 coexists safely |
 | 8 | ERM GPIO damage | RESOLVED by DRV2605L (ordered ×3); rule stands permanently |
 | — | I2C pull-up conflict | RESOLVED: 1.5 kΩ onboard on I2C1 & I2C2, add nothing |
 | — | µT-Kernel M55 port | RESOLVED: copy mtk3_bsp2 from repo (fallback: official v1.00.04) |
@@ -138,3 +144,4 @@ Fallback BSP: official tron-forum/mtk3_bsp2 **v1.00.04 (May 2026) officially sup
 - Diagnostics: list ALL plausible causes ranked by likelihood; label evidence vs inference vs speculation; state the single test that eliminates each; give confidence (certain/likely/speculative). Never generalize from partially tested cases.
 - Do not change a recommendation because of pushback alone. Re-evaluate honestly: hold if right (and ask for the developer's reasoning), correct if wrong. Never switch to avoid friction.
 - Before ANY firmware/hardware answer, check: I2C? → DMA, Priority 3 only. Task creation? → TK_PRI stated + priorities confirmed free (verified 2026-07-03, config.h:27). Shared memory? → semaphore pattern present. ML? → NPU-safe ops only.
+- After ANY Claude Code commit: rebuild in CubeIDE and confirm the `-Trusted.bin` timestamp is NEWER than the commit before flashing. "Committed" ≠ "built" ≠ "flashed" — flashing a stale pre-strip binary cost three flash cycles on 2026-07-05.
