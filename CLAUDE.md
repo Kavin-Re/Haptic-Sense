@@ -4,7 +4,7 @@ AI-driven predictive spatial-awareness wearable for visually impaired users.
 Hard deadline: **September 25, 2026**. Benchtop prototype is the deliverable — NOT a wearable enclosure.
 Developer: solo BTech student, **zero prior experience** in RTOS, ML training, FSBL/TrustZone boot, NPU deployment. Explain new µT-Kernel concepts with a FreeRTOS/real-world analogy first, then the exact API, then where the same pattern appears in the reference repo.
 
-**PHASE STATUS (2026-07-05):** Phase 3 COMPLETE, verified on hardware — minimal LED+UART heartbeat (commit `7a87671`) runs from Flash Boot. UART shows `[HB]` counter at steady ~503 ms period (500 ms `tk_slp_tsk` + overhead) over 27+ samples; `tk_get_otm()` uptime monotonic and sane; no `[CAMERA_INIT]` in the boot trace (camera-pipeline strip confirmed; binary 682 KB → 63 KB). `DEVCNF_USE_HAL_IIC` still `0` — the flip to `1` is the FIRST action of Phase 5.
+**PHASE STATUS (2026-07-05):** Phase 3 COMPLETE (commit `7a87671`, hardware-verified: heartbeat ~503 ms, camera strip confirmed, binary 682 KB → 63 KB). **Phase 4 PARTIAL** — four-task architecture (hazard=1 / inference=2 / sensor=3 / heartbeat=10, commit `04994a5`) with paired semaphores + synthetic 50 Hz data verified on hardware: ~32 min soak, ~91,000 frames with `frames==inf` in perfect lockstep (no inference backlog), `canary_err=0` across all 1897 logged lines (grep `canary_err=[^0]` returned nothing — zero torn reads), `q=0`/`qovr=0` throughout, measured ~47.6 Hz (50 Hz nominal). Evidence: `docs/evidence/phase4/phase4_soak.log`. **REMAINING for Phase 4:** preemption measurement campaign NOT done — `DEBUG_TIMING` still compiled out, Red Zone #3 stays OPEN. `DEVCNF_USE_HAL_IIC` still `0` — the flip to `1` is the FIRST action of Phase 5.
 
 ---
 
@@ -50,6 +50,8 @@ MB1854B camera module (present in kit) carries VL53L5CX @ 0x29 + ISM330DLC (0x6A
 | 2 | TinyML Inference | Reads buffer via semaphore, calls NeuralART. NO I/O, NO I2C. |
 | 3 | Sensor Acquisition | ALL I2C. DMA mode ONLY. Never blocking. |
 | 15+ | Idle | WFI only. NEVER Stop mode (wake latency breaks < 1 ms guarantee). |
+
+Idle reality check (verified 2026-07-05): the STM32 port's `low_pow()` is an EMPTY function (`mtk3_bsp2/sysdepend/stm32_cube/power_save.c:28-30`) — idle spins, never enters WFI or Stop mode, so the "NEVER Stop mode" rule holds by construction; there is no deep-sleep wake latency on the hazard path.
 
 **ABSOLUTE RULES:**
 - Any `HAL_I2C_Master_Transmit()` / `HAL_I2C_Master_Receive()` (blocking) = red-zone violation. Only `_DMA()` (preferred) or `_IT()` variants.
@@ -128,8 +130,8 @@ Fallback BSP: official tron-forum/mtk3_bsp2 **v1.00.04 (May 2026) officially sup
 |---|---|---|
 | 1 | FSBL signing pipeline | RESOLVED 2026-07-05: full chain verified on hardware — FSBL → signed app @ 0x70100000, Flash Boot, Phase 3 heartbeat running (`-align` present, correct tool path) |
 | 2 | Toolchain versions | VERIFIED: STM32CubeIDE 2.2.0, STM32CubeProgrammer 2.23.0, both N6-capable, build succeeds |
-| 3 | <1 ms preemption measurement | instrument from Day 1; LA verified via sigrok scan |
-| 4 | Inference-buffer race | pattern defined (§3) — implement before task bodies |
+| 3 | <1 ms preemption measurement | OPEN — instrumentation staged (commit `04994a5`) but `DEBUG_TIMING` compiled out; campaign NOT run. Next-session first actions: add `-DDEBUG_TIMING` to `.cproject` → rebuild/reflash → `sigrok-cli --scan` to confirm LA → wire PH5(D4)/PD6(D7) → capture Δt(D0→D1) over ≥100 hazard events under chatter load → report worst-case max Δt < 1 ms |
+| 4 | Inference-buffer race | RESOLVED 2026-07-05: paired-semaphore handshake (seq/seq_check canary torture test) proven correct on hardware — ~91k events, zero torn reads over ~32 min soak (`docs/evidence/phase4/phase4_soak.log`, commit `04994a5`) |
 | 5 | ML scope creep | Edge Impulse only; feature vector locked (§6) |
 | 6 | NPU silent CPU fallback | FC/ReLU/Sigmoid only |
 | 7 | Task priorities free | PRE-WORK DONE 2026-07-05: priorities 1/2/3/10 verified free (`config.h:27`, range 1–32; heartbeat=10, main_thread=15). Wrinkle: kernel inittask is created at TK_PRI 1 (`inittask.h:26`), runs `usermain()`, then parks forever on `tk_slp_tsk(TMO_FEVR)` (`main.c:107`) — permanently dormant, never preempts; µT-Kernel allows multiple tasks per priority, so the Phase 4 Hazard task at TK_PRI 1 coexists safely |
