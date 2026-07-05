@@ -51,6 +51,8 @@
 									<listOptionValue builtIn="false" value="APP_HAS_PARALLEL_NETWORKS=0"/>
 									<listOptionValue builtIn="false" value="SCR_LIB_USE_LTDC"/>
 									<listOptionValue builtIn="false" value="TRACKER_MODULE"/>
+									<listOptionValue builtIn="false" value="DEBUG_TIMING"/>
+									<listOptionValue builtIn="false" value="DEBUG_CHATTER"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.assembler.option.includepaths.328374151" name="Include paths (-I)" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.assembler.option.includepaths" valueType="includePath">
 									<listOptionValue builtIn="false" value="../Core/Inc"/>
@@ -108,6 +110,8 @@
 									<listOptionValue builtIn="false" value="APP_HAS_PARALLEL_NETWORKS=0"/>
 									<listOptionValue builtIn="false" value="SCR_LIB_USE_LTDC"/>
 									<listOptionValue builtIn="false" value="TRACKER_MODULE"/>
+									<listOptionValue builtIn="false" value="DEBUG_TIMING"/>
+									<listOptionValue builtIn="false" value="DEBUG_CHATTER"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.compiler.option.includepaths.1194356615" name="Include paths (-I)" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.compiler.option.includepaths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="../Core/Inc"/>
