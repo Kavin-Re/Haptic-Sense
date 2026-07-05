@@ -107,9 +107,10 @@ Fallback BSP: official tron-forum/mtk3_bsp2 **v1.00.04 (May 2026) officially sup
 ## 6. TinyML (RED ZONES #5, #6)
 
 - Pipeline: Edge Impulse (browser) → `.tflite` INT8 → `generate-n6-model.sh` → `network.c` + `network_data.hex`
-- Feature vector (13, @ 50 Hz): [d(t)…d(t−9) mm, v cm/s, a cm/s², ax, ay, az mg]. Fallback if IMU dropped: 12 features.
+- Feature vector (**15**, @ 50 Hz): [d(t)…d(t−9) mm (10) · v cm/s · a cm/s² · ax, ay, az mg (3)]. Fallback if IMU dropped: 12 features (10+2). (Corrected 2026-07-05: headline said "13" but the enumeration counts 15; the enumeration is authoritative.)
+- **LOCKED CONTRACT**: firmware `FEAT_COUNT` (`Core/Src/app_tasks.c`) and the Edge Impulse feature spec are ONE contract — neither changes without the other. A mismatch silently degrades the NPU model (Red Zone #6).
 - Label: Hazard = distance < 80 cm AND closing velocity > 20 cm/s
-- Model: 3-layer FC 13→32→16→1 sigmoid. NPU-safe ops ONLY: Conv1D/2D, DepthwiseConv, FullyConnected, ReLU, Sigmoid, BatchNorm. **NEVER LSTM/GRU/attention** — unsupported ops fall back to CPU silently, 10–30× slower, no error.
+- Model: 3-layer FC 15→32→16→1 sigmoid. NPU-safe ops ONLY: Conv1D/2D, DepthwiseConv, FullyConnected, ReLU, Sigmoid, BatchNorm. **NEVER LSTM/GRU/attention** — unsupported ops fall back to CPU silently, 10–30× slower, no error.
 - Verify order: CPU inference → validate test vectors → enable NPU → compare NPU vs CPU outputs → measure `inference_ms` via `tk_get_otm()`.
 - Haptic semantics: intensity/pattern-graded urgency (pulse rate ∝ closing velocity). Single-zone ToF gives NO direction — never claim directional feedback in code comments or docs.
 
