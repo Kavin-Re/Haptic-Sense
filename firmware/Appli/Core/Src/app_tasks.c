@@ -45,6 +45,7 @@
 
 #include "app_tasks.h"
 
+#include "app_i2c.h"
 #include "stm32n6xx_hal.h"
 #include "tk/tkernel.h"
 #include "tm/tmonitor.h"
@@ -304,9 +305,22 @@ static void sensor_fill_frame(void)
 	feature_buf[FEAT_IDX_AZ] = 1000;	/* 1 g */
 }
 
+/* Phase 5 L1 bring-up state — writer: sensor_task; reader: heartbeat_task */
+static volatile W i2c_init_result = 1;	/* 1 = not yet run; E_OK/E_xx after */
+
 static void sensor_task_fct(INT stacd, void *exinf)
 {
 	ER err;
+
+	/* Phase 5 MANDATORY GATE (L1 design doc, review 2026-07-06): init I2C1
+	 * + prove DMA moves bytes with ONE register read, in isolation, BEFORE
+	 * any L2/ULD code exists. Failure is captured, not fatal — the synthetic
+	 * pipeline below keeps running either way (bounded worst case ~290 ms:
+	 * 2 addresses x ~145 ms per-transfer worst case incl. recovery+retry).
+	 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
+	i2c_init_result = (W)app_i2c_init();
+	if (i2c_init_result == E_OK)
+		app_i2c_gate_test();
 
 	for (;;) {
 		sensor_fill_frame();
@@ -348,6 +362,15 @@ static void heartbeat_task_fct(INT stacd, void *exinf)
 		tm_printf((UB *)"[HB] up_ms=%u frames=%u inf=%u hazard=%u canary_err=%u q=%d qovr=%u\n",
 			  tim.lo, stat_frames, stat_inferences, stat_hazard_events,
 			  stat_canary_errs, backlog, stat_dataq_ovr);
+
+		{	/* Phase 5 L1 gate + clock verification (design doc §6) */
+			const app_i2c_stats_t *s = app_i2c_stats();
+			tm_printf((UB *)"[I2C] init=%d gate=%d whoami=0x%x addr=0x%x ok=%u err=%u tmo=%u recov=%u pclk1=%u sysclk=%u\n",
+				  (INT)i2c_init_result, (INT)s->gate_result,
+				  s->gate_whoami, s->gate_addr,
+				  s->xfer_ok, s->xfer_err, s->timeouts, s->recoveries,
+				  s->clk_pclk1_hz, s->clk_sysclk_hz);
+		}
 
 #ifdef DEBUG_TIMING
 		if (dwt_dt_cnt > 0) {
