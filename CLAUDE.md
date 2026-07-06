@@ -4,7 +4,7 @@ AI-driven predictive spatial-awareness wearable for visually impaired users.
 Hard deadline: **September 25, 2026**. Benchtop prototype is the deliverable — NOT a wearable enclosure.
 Developer: solo BTech student, **zero prior experience** in RTOS, ML training, FSBL/TrustZone boot, NPU deployment. Explain new µT-Kernel concepts with a FreeRTOS/real-world analogy first, then the exact API, then where the same pattern appears in the reference repo.
 
-**PHASE STATUS (2026-07-06):** Phase 3 COMPLETE (commit `7a87671`, hardware-verified: heartbeat ~503 ms, camera strip confirmed, binary 682 KB → 63 KB). **Phase 4 FULLY COMPLETE** — (a) correctness gate: four-task architecture (hazard=1 / inference=2 / sensor=3 / heartbeat=10, commit `04994a5`), ~32 min soak, ~91,000 frames in `frames==inf` lockstep, `canary_err=0` (zero torn reads), `q=0`/`qovr=0`, ~47.6 Hz (`docs/evidence/phase4/phase4_soak.log`); (b) preemption campaign (RZ3) PASSED: worst case **3.375 µs** over 2,229 events under chatter load, baseline statistically identical (see §8 RZ3 for full numbers; evidence in `docs/evidence/phase4/`). `DEVCNF_USE_HAL_IIC` still `0` — the flip to `1` is the FIRST action of Phase 5.
+**PHASE STATUS (2026-07-06):** Phase 3 COMPLETE (commit `7a87671`, hardware-verified: heartbeat ~503 ms, camera strip confirmed, binary 682 KB → 63 KB). **Phase 4 FULLY COMPLETE** — (a) correctness gate: four-task architecture (hazard=1 / inference=2 / sensor=3 / heartbeat=10, commit `04994a5`), ~32 min soak, ~91,000 frames in `frames==inf` lockstep, `canary_err=0` (zero torn reads), `q=0`/`qovr=0`, ~47.6 Hz (`docs/evidence/phase4/phase4_soak.log`); (b) preemption campaign (RZ3) PASSED: worst case **3.375 µs** over 2,229 events under chatter load, baseline statistically identical (see §8 RZ3 for full numbers; evidence in `docs/evidence/phase4/`). **Phase 5 IN PROGRESS** (Option A decided 2026-07-06): `DEVCNF_USE_HAL_IIC` stays `0` PERMANENTLY — app owns HAL I2C directly (see §3 "I2C driver decision"); next: own L0/L1 driver.
 
 ---
 
@@ -80,8 +80,12 @@ NPU-managed buffers are covered by the `--cache-maintenance` flag in `user_neura
 - DWT method in firmware: `DWT->CYCCNT`; cycles / 600000 = ms at 600 MHz.
 - Terminology: never write "zero-latency" anywhere. Use "deterministic sub-millisecond latency (< 1 ms, hardware-verified)".
 
-### I2C driver status (CRITICAL — verify before first I2C code, verified 2026-07-04)
-The µT-Kernel STM32 I2C driver (`sysdepend/stm32_cube/device/hal_i2c/hal_i2c.c`) is currently **GATED OFF** by `DEVCNF_USE_HAL_IIC=0` in `config_bsp/stm32_cube/config_bsp.h:40` — it is inert / not in the built image. Haptic-sense's Priority 3 sensor task **REQUIRES** I2C1 (VL53L1X 0x29, MPU6050 0x68, DRV2605L 0x5A), so `DEVCNF_USE_HAL_IIC` must be flipped to `1` when bringing up the I2C peripheral. `hal_i2c.c` already has a correct static-fallback `#else` branch for `TK_SUPPORT_MEMLIB=0` (`dev_i2c_cb` static array), so enabling it should need NO Kmalloc patch — but re-verify the `#else` path compiles clean under `USE_IMALLOC=0` after flipping the flag. Re-verified still `0` through Phase 3 (2026-07-05); the flip is the FIRST action of Phase 5.
+### I2C driver decision (Phase 5, Option A — decided 2026-07-06)
+**`DEVCNF_USE_HAL_IIC` stays `0` PERMANENTLY** (`config_bsp/stm32_cube/config_bsp.h:40`). Phase 5 sensor I2C is **Option A**: the app owns ST HAL directly (own L0/L1, semaphore-wrapped DMA/IT, Priority 3 task only). The BSP wrapper must NOT compile in — it defines the strong `HAL_I2C_*CpltCallback` symbols (`hal_i2c.c:134-172`) that our driver must own; flag=1 + Option A = duplicate-symbol link errors.
+Corrections to earlier claims (verified against source 2026-07-06):
+- The flag gates ONLY the BSP wrapper (`hal_i2c.c`) + its devinit registration (`devinit.c` `knl_start_device()` also IMPORTs an application-defined `hi2c1` — flag=1 without one is a link error). It does NOT gate HAL I2C compilation: `stm32n6xx_hal_i2c.c` compiles regardless via `HAL_I2C_MODULE_ENABLED` (`stm32n6xx_hal_conf.h:53`). The Phase 5 design doc §4.1 "flip it anyway" premise is wrong.
+- The earlier "correct static-fallback, no Kmalloc patch needed" claim was WRONG: `hal_i2c.c:60`'s `#else` branch has a one-char typo (`dev_I2C_cb` vs `dev_i2c_cb`) — compile error under `TK_SUPPORT_MEMLIB=0`; it would need an msdrvif-style typo patch if ever enabled. Its Kmalloc/Kfree calls ARE correctly guarded — no heap issue.
+- The BSP IIC driver is IT-mode internally (six `HAL_I2C_*_IT` calls; zero blocking, zero DMA) — kept as REFERENCE ONLY for the flag-wait pattern (`tk_wai_flg` + HAL callbacks → `tk_set_flg`), which our L1 reimplements as semaphore + DMA.
 
 ## 4. BOOT & SIGNING (RED ZONE #1 — silent failure mode)
 
