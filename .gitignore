@@ -18,3 +18,6 @@ firmware/Lib/AI_Runtime/
 # Vendored ST HAL/CMSIS/BSP package (94 MB) — kept on disk for the build,
 # not tracked in git history
 firmware/STM32Cube_FW_N6/
+
+# Python bytecode (analysis scripts)
+__pycache__/

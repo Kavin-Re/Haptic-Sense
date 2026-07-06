@@ -1,0 +1,38 @@
+Phase 4 preemption-latency analysis — input: timing_chatter*.sr (under chatter load)
+sample rate 8 MHz -> 125.0 ns/sample; pass line: max dt < 1000 us
+
+  timing_chatter.sr         12.56 s  D0 edges= 594  paired= 594  missed=0  truncated@EOF=0  max=3.38 us
+  timing_chatter_1.sr       12.50 s  D0 edges= 592  paired= 592  missed=0  truncated@EOF=0  max=3.38 us
+  timing_chatter_2.sr        9.52 s  D0 edges= 451  paired= 451  missed=0  truncated@EOF=0  max=3.38 us
+  timing_chatter_3.sr       12.50 s  D0 edges= 592  paired= 592  missed=0  truncated@EOF=0  max=3.38 us
+
+pooled events N = 2229   missed = 0   truncated@EOF = 0
+
+  min   =      3.250 us
+  mean  =      3.266 us
+  sigma =      0.041 us
+  max   =      3.375 us   (2,025 cycles @ 600 MHz — DWT cross-check)
+
+histogram (pooled dt):
+      3.25 -     3.26 us |   1950 | ########################################################
+      3.26 -     3.26 us |      0 | 
+      3.26 -     3.27 us |      0 | 
+      3.27 -     3.27 us |      0 | 
+      3.27 -     3.28 us |      0 | 
+      3.28 -     3.29 us |      0 | 
+      3.29 -     3.29 us |      0 | 
+      3.29 -     3.30 us |      0 | 
+      3.30 -     3.31 us |      0 | 
+      3.31 -     3.31 us |      0 | 
+      3.31 -     3.32 us |      0 | 
+      3.32 -     3.33 us |      0 | 
+      3.33 -     3.33 us |      0 | 
+      3.33 -     3.34 us |      0 | 
+      3.34 -     3.34 us |      0 | 
+      3.34 -     3.35 us |      0 | 
+      3.35 -     3.36 us |      0 | 
+      3.36 -     3.36 us |      0 | 
+      3.36 -     3.37 us |      0 | 
+      3.37 -     3.38 us |    279 | ########
+
+PASS: worst-case dt = 3.375 us < 1000 us over 2229 events under chatter load
