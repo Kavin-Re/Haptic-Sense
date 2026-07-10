@@ -30,8 +30,10 @@ Developer: solo BTech student, **zero prior experience** in RTOS, ML training, F
 | MPU6050 IMU (primary) | 0x68 (verify AD0 by bus scan; 0x69 if high) | GY-521 | INT → **PE9** (ARD_D3) |
 | DRV2605L haptic driver | 0x5A | Adafruit ×1 + SmartElex ×2 | EN → **PE7** (ARD_D8) |
 
+Adafruit breakout exposes IN/TRIG as pin labeled `INT` (max 1.8V — requires voltage divider from a 3.3V GPIO) [source: Adafruit DRV2605L pinouts page, learn.adafruit.com]. SmartElex breakouts expose `IN` and `EN` as separately-labeled header pins [source: physical inspection of board silkscreen, July 10 2026]. All vendor breakouts wire the same DRV2605L IC pins — one firmware, interchangeable boards [source: TI SLOS854D pin functions, ti.com].
+
 ### Arduino header pin map (subset in use)
-D15/PH9=SCL · D14/PC1=SDA · D8/PE7=DRV_EN · D7/PD6=**TIMING_D1** · D4/PH5=**TIMING_D0** · D3/PE9=IMU_INT · D2/PD0=TOF_INT
+D15/PH9=SCL · D14/PC1=SDA · D8/PE7=DRV_EN · D7/PD6=**TIMING_D1** · D4/PH5=**TIMING_D0** · D3/PE9=IMU_INT · D2/PD0=TOF_INT · IN/TRIG=[UNVERIFIED — GPIO not yet allocated, H-D1b]
 
 ### Onboard LED (HARDWARE-CONFIRMED 2026-07-05, Phase 3)
 LD1 = **PO1, active HIGH**. Port O carries XSPI1 (PSRAM) on PO0/PO2/PO3/PO4 — the memory the app executes from. **Configure ONLY PO1, pin-masked calls only**: `HAL_GPIO_Init` (masked RMW) + `HAL_GPIO_TogglePin` (atomic BSRR) confirmed working on hardware with XSPI1 untouched. Never `GPIO_PIN_All` / port-wide writes on port O. Verified against source: `__HAL_RCC_GPIOO_CLK_ENABLE()` exists (`stm32n6xx_hal_rcc.h:981`); `GPIOO` resolves to secure alias `GPIOO_S` (correct for this TrustZone build). LD2 (red, PG10, active LOW) may indicate BOOTFAILEDN — leave untouched.
@@ -41,6 +43,12 @@ ERM coin 10 mm × 3.4 mm (3 V class) driven ONLY through DRV2605L. **NEVER conne
 
 ### Onboard upgrade path (documented, OFF critical path)
 MB1854B camera module (present in kit) carries VL53L5CX @ 0x29 + ISM330DLC (0x6A/0x6B) on I2C1 via FFC CN14. GPIOs: TOF_INT=PQ0, TOF_LPn=PQ5, IMU_INT1=PQ1, IMU_INT2=PQ2, NRST_CAM=PC8, EN_MODULE=PD2. Do not integrate before core pipeline works end-to-end. VL53L5CX limits: 15 Hz @ 8×8 / 60 Hz @ 4×4, ~88 KB firmware upload over I2C at init.
+
+### LOCKED DRIVER DECISIONS (July 10 2026)
+- MPU6050 DLPF_CFG = 4 (~21 Hz bandwidth, under 25 Hz Nyquist for the 50 Hz pipeline) [source: RM-MPU-6000A register map]
+- MPU6050 accel full-scale range = ±4g (4096 LSB/g) [source: RM-MPU-6000A]
+- Both MPU6050 settings locked BEFORE Edge Impulse data collection — changing either afterward rescales all collected training samples.
+- DRV2605L = open-loop baseline (ERM + ROM library); closed-loop deferred as a clean add-on per drv2605l_port_design_v1.md §4.2/§5 [source: TI SLOS854D §9.3.1].
 
 ## 3. TASK ARCHITECTURE (µT-Kernel TK_PRI — lower = higher priority)
 
@@ -130,6 +138,8 @@ Fallback BSP: official tron-forum/mtk3_bsp2 **v1.00.04 (May 2026) officially sup
 
 ## 8. RED ZONES — current status
 
+**Milestone (2026-07-10):** Three sensor/actuator driver port designs complete (VL53L1X, MPU6050, DRV2605L). Design docs at `~/haptic-sense/docs/design/`: `vl53l1x_port_design.md`, `mpu6050_port_design_v1.md`, `drv2605l_port_design_v1.md`.
+
 | # | Zone | Status |
 |---|---|---|
 | 1 | FSBL signing pipeline | RESOLVED 2026-07-05: full chain verified on hardware — FSBL → signed app @ 0x70100000, Flash Boot, Phase 3 heartbeat running (`-align` present, correct tool path) |
@@ -142,6 +152,16 @@ Fallback BSP: official tron-forum/mtk3_bsp2 **v1.00.04 (May 2026) officially sup
 | 8 | ERM GPIO damage | RESOLVED by DRV2605L (ordered ×3); rule stands permanently |
 | — | I2C pull-up conflict | RESOLVED: 1.5 kΩ onboard on I2C1 & I2C2, add nothing |
 | — | µT-Kernel M55 port | RESOLVED: copy mtk3_bsp2 from repo (fallback: official v1.00.04) |
+
+### DRV2605L Verification Ledger (H-D series, from drv2605l_port_design_v1.md §9)
+- H-D1: IN/TRIG wiring — (a) breakouts expose the pin: CONFIRMED (Adafruit `INT`, SmartElex `IN`); (b) GPIO allocation: OPEN.
+- H-D2: EN-rise state ambiguity — bench test pending.
+- H-D3: effect duration (sets min inter-pulse period) — logic analyzer pending.
+- H-D4: library choice (B assumed) — measure rise/brake vs Table 1, pending.
+- H-D5: breakout VDD rail — measurement attempted July 10, inconclusive (unstable meter reading, likely breadboard contact); assume 3.3V, remeasure pending.
+- H-D6: ERM coil resistance vs 4Ω OC threshold — PROVISIONALLY CLEARED: estimated 25–37.5Ω from vendor rated V/I (3V / 80–120mA); direct multimeter measurement still pending [source: vendor spec sheet, ERM coin type 3VDC 80–120mA].
+- H-D7: DEV_RESET self-clear time — instrument on first hardware run.
+- H-D8: I2C1 SCL ≤ 400 kHz with DRV2605L on shared bus — confirm timing constant.
 
 ## 9. HOW TO BEHAVE (Claude Code)
 
