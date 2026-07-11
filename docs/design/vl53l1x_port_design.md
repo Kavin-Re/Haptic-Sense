@@ -149,6 +149,26 @@ Exactly the §3 mapping. Confidence: certain.
 
 ## 3. PLATFORM-FUNCTION → PRIMITIVE MAPPING
 
+**Corrected 2026-07-11 per the v2 reconciliation pass and audit finding F-4:**
+every row below originally passed the literal `2` as the regsz argument. The
+primitive's dispatch (`app_i2c.c:316`) is `regsz == I2C_REG16` — a *symbolic*
+comparison, not numeric. If a literal `2` is passed and `I2C_REG16` is not
+defined as `2` in `app_i2c.h`, the comparison silently falls to the 8-bit
+branch: only the index LSB is emitted, the VL53L1X ACKs anyway
+(register-mapped slaves ACK any index), and every read returns wrong data with
+**no error signal**. All literal `2`s below are replaced with the symbol
+`I2C_REG16`, matching the rule already stated in
+`vl53l1x_port_design_v2_reconciliation.md` §1.3. If you have an older cached
+copy of this table with bare `2`s, it predates this correction — use this
+version.
+
+`I2C_REG16` verified (closes V-2): `app_i2c.h:20` — `#define I2C_REG16 2u`.
+Numerically identical to the old literal today, but the symbol is the
+committed contract; the primitive's own behavior never depended on the
+literal being right, and a future redefinition of `I2C_REG16` would silently
+break any hand-copied literal call site while leaving symbol-based ones
+correct.
+
 All shim functions run **only in `sensor_task` (TK_PRI 3)** — same context that
 owns `i2c_rd`/`i2c_wr`. This satisfies CLAUDE.md §3 ("Any I2C call outside the
 Priority 3 task = red-zone violation"). Every shim function gets the mandatory
@@ -156,18 +176,18 @@ comment `// ONLY CALL FROM PRIORITY 3 SENSOR TASK`.
 
 Notation: `dev7 = dev >> 1`. `i2c_wr(dev7, reg, regsz, buf, len)` /
 `i2c_rd(dev7, reg, regsz, buf, len)` are the committed semaphore-wrapped DMA
-primitives. `regsz = 2` for all VL53L1X access.
+primitives. `regsz = I2C_REG16` for all VL53L1X access.
 
 ```
-WrByte (dev,index,data):        b[0]=data;                         i2c_wr(dev7, index, 2, b, 1)
-WrWord (dev,index,data):        b[0]=data>>8; b[1]=data;           i2c_wr(dev7, index, 2, b, 2)
-WrDWord(dev,index,data):        b[0..3]=data>>24..data (BE);       i2c_wr(dev7, index, 2, b, 4)
-RdByte (dev,index,*pdata):      i2c_rd(dev7,index,2,b,1); *pdata=b[0]
-RdWord (dev,index,*pdata):      i2c_rd(dev7,index,2,b,2); *pdata=(b[0]<<8)|b[1]
-RdDWord(dev,index,*pdata):      i2c_rd(dev7,index,2,b,4); *pdata=BE32(b)
-WriteMulti(dev,index,p,count):  i2c_wr(dev7, index, 2, p, count)   // pass-through, no swap
-ReadMulti (dev,index,p,count):  i2c_rd(dev7, index, 2, p, count)   // pass-through, no swap
-WaitMs(dev, wait_ms):           tk_dly_tsk(wait_ms)                // NOT a busy loop
+WrByte (dev,index,data):        b[0]=data;                         i2c_wr(dev7, index, I2C_REG16, b, 1)
+WrWord (dev,index,data):        b[0]=data>>8; b[1]=data;           i2c_wr(dev7, index, I2C_REG16, b, 2)
+WrDWord(dev,index,data):        b[0..3]=data>>24..data (BE);       i2c_wr(dev7, index, I2C_REG16, b, 4)
+RdByte (dev,index,*pdata):      i2c_rd(dev7,index,I2C_REG16,b,1); *pdata=b[0]
+RdWord (dev,index,*pdata):      i2c_rd(dev7,index,I2C_REG16,b,2); *pdata=(b[0]<<8)|b[1]
+RdDWord(dev,index,*pdata):      i2c_rd(dev7,index,I2C_REG16,b,4); *pdata=BE32(b)
+WriteMulti(dev,index,p,count):  i2c_wr(dev7, index, I2C_REG16, p, count)   // pass-through, no swap
+ReadMulti (dev,index,p,count):  i2c_rd(dev7, index, I2C_REG16, p, count)   // pass-through, no swap
+WaitMs(dev, wait_ms):           tk_dly_tsk(wait_ms)                        // NOT a busy loop
 ```
 
 **Return-code translation:** map primitive success → `0`, any primitive
