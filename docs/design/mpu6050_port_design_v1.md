@@ -70,7 +70,7 @@ Reading 14 (including temp) rather than two 6-byte reads costs 2 wasted bytes an
 | # | Reg | Value | Effect | Source |
 |---|---|---|---|---|
 | 0 | 0x75 read | expect 0x68 | identity gate before any write | {RM §4.34} |
-| 1 *(opt)* | 0x6B | 0x80 | DEVICE_RESET — all registers to defaults; **bit self-clears when done** → poll 0x6B until bit7==0 rather than a fixed delay | {RM §4.30 Parameters} |
+| 1 *(opt)* | 0x6B | 0x80 | DEVICE_RESET — all registers to defaults; **bit self-clears when done** → poll 0x6B until bit7==0, **bounded** (closes audit M-2, 2026-07-11): ≤5 attempts, `tk_dly_tsk(1)` between each `i2c_rd`; exhaustion = fail init loudly (E_NOENT-style), never proceed silently — same "fail loudly, never guess" discipline as the §1 address probe. Matches the bounded-poll pattern already used for DRV2605L row 0 and the VL53L1X boot gate. Rationale: an unbounded/unpaced poll can permanently livelock the pipeline if the device never clears (unpowered/wedged), and each failed `i2c_rd` costs ~145 ms through the primitive's retry+recovery envelope | {RM §4.30 Parameters} |
 | 2 | 0x6B | **0x01** | SLEEP=0, CYCLE=0, TEMP_DIS=0, CLKSEL=1 = PLL w/ X-gyro reference — "highly recommended… for improved stability" over the internal oscillator | {RM §4.30 + CLKSEL table} |
 | 3 | — | wait | PLL settling 1–10 ms {PS §6.6}; gyro ZRO settling **30 ms** {PS §6.1}; accel path wake-up ≥4 ms {RM §4.28}. One `tk_dly_tsk(50)` covers all three with margin |  |
 | 4 | 0x1A | DLPF_CFG (opt. A/B below) | DLPF on ⇒ gyro output rate = **1 kHz** (prerequisite for step 5's arithmetic) | {RM §4.2, §4.3} |
@@ -100,7 +100,7 @@ Electrical: with step 8's config, INT is push-pull, active-high, latched until c
 **Option A (recommended for bring-up): latched-level poll, no EXTI.** Sensor task runs its existing 20 ms cadence (`tk_dly_tsk`/cyclic pattern); each frame: `HAL_GPIO_ReadPin(PE9)` — if high, burst-read (which clears the latch `{RM §4.15 INT_RD_CLEAR}`); if low, mark IMU frame stale and reuse the last sample (the 12-feature fallback path in CLAUDE.md §6 already anticipates IMU degradation). Zero new ISR surface, zero new kernel objects, and the latch means a data-ready that arrived *between* polls is never missed — level, not edge, is what makes polling safe here.
 - Cost: up to one frame of added latency on the IMU path (bounded 20 ms) and the two clock domains (MPU's ±1% `{PS §6.6 CLK_SEL=1,2,3}` vs kernel tick) beat against each other — occasionally a poll finds no fresh sample or two samples' worth elapsed. At 50 Hz vs 50 Hz nominal this is a ~1%-of-frames effect; the stale-frame flag handles it.
 
-**Option B: EXTI on PE9 → `tk_wup_tsk(sensor_task)`.** The MPU becomes the pipeline timebase; jitter collapses to interrupt latency. Constraints if chosen: the handler is registered via `tk_def_int(TA_HLNG)` + `EnableInt` at level 1..15 exactly like the four I2C IRQs (app_i2c.c:36-39, 219-237), does **nothing but** `tk_wup_tsk` — any I2C from the handler is a red-zone violation — and the ToF read then rides the IMU's clock, which slightly complicates the VL53L1X's own intermeasurement cadence bookkeeping.
+**Option B: EXTI on PE9 → `tk_sig_sem(imu_data_ready_sem)`.** The MPU becomes the pipeline timebase; jitter collapses to interrupt latency. **Standardized 2026-07-11 (audit M-3): `tk_sig_sem`, not `tk_wup_tsk`** — count-carrying semantics mean a data-ready event that fires while sensor_task is mid-frame is never lost (a `tk_wup_tsk` wake-count can saturate/collapse under the same condition), and this matches the VL53L1X production EXTI path (`vl53l1x_port_design.md` §6.1: PD0 handler signals a semaphore that sensor_task waits on) and the project's paired-semaphore architecture (CLAUDE.md §3). Constraints if chosen: the handler is registered via `tk_def_int(TA_HLNG)` + `EnableInt` at level 1..15 exactly like the four I2C IRQs (app_i2c.c:36-39, 219-237), does **nothing but** `tk_sig_sem` — any I2C from the handler is a red-zone violation, kernel-legal level, otherwise identical to the prior design — and the ToF read then rides the IMU's clock, which slightly complicates the VL53L1X's own intermeasurement cadence bookkeeping.
 - Recommendation: A for first light and the soak; migrate to B only if the logic-analyzer timing campaign (H3-class evidence) shows the poll beat-frequency actually degrading the feature vector. The decision is reversible in one function.
 
 ---
@@ -130,6 +130,16 @@ Integer form for TK_PRI 3 (no float dependency): `mg = ((int32_t)raw * 1000) / 8
 
 ## 7. WHAT THIS DOC DOES *NOT* COVER
 Sensor-fusion timing between ToF and IMU inside the 20 ms frame (belongs to the pipeline-integration doc once both sensors have first light); MPU6050 motion-interrupt/DMP features (DMP explicitly out of scope — NPU does the inference, and DMP would add an undocumented firmware dependency); temp compensation.
+
+**Binding constraint recorded, not designed (audit M-4, 2026-07-11):** §4 Option A's
+stale-IMU-frame indicator ("if INT low, mark frame stale, reuse last sample, fall to
+12-feature vector") currently has no specified transport across P3→P2 — that handoff is
+Phase 6 scope, not this doc's. The constraint Phase 6 inherits: **the staleness
+indicator MUST travel inside the semaphore-protected P3→P2 feature-frame buffer (e.g. a
+validity field in the frame struct), never as a bare cross-task flag** — a bare flag
+would be an F-1-class unprotected shared-state race (see `drv2605l_port_design_v1.md`
+§2, R-EN-3/R-EN-4: the same lost-update shape, config-invalid flag vs readback-verify).
+Closes M-4 together with F-6d at Phase 6 handoff design.
 
 ## 8. VERIFICATION LEDGER
 

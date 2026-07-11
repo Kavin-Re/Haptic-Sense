@@ -67,6 +67,7 @@ Idle reality check (verified 2026-07-05): the STM32 port's `low_pow()` is an EMP
 - µT-Kernel API only. NEVER FreeRTOS (`xTaskCreate`, `vTaskDelay`, `xSemaphoreGive` are all wrong here). Use `tk_cre_tsk`, `tk_sta_tsk`, `tk_slp_tsk`, `tk_wup_tsk`, `tk_cre_sem`, `tk_wai_sem`, `tk_sig_sem`, `tk_loc_mtx`/`tk_unl_mtx`, `tk_get_otm`, `tm_printf`.
 - Before the first `tk_cre_tsk()`: verify priorities 1–3 are free in `Appli/mtk3_bsp2/config/config.h:27` (`CNF_MAX_TSKPRI 32`) and document the finding in a comment block.
 - When writing any RTOS code, always state which task it runs in and its TK_PRI. For semaphore code, always name producer and consumer.
+- All sensor data-ready ISR→P3 wakes use `tk_sig_sem` (count-carrying), never `tk_wup_tsk` — decided 2026-07-11, audit M-3.
 
 ### Race-condition pattern (implement BEFORE any task body — paired semaphores)
 ```c
