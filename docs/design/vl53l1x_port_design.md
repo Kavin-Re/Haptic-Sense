@@ -493,8 +493,12 @@ or datasheet work, listed at the bottom.
    (`API/LICENSE.txt:1-6`, no `Package_license` in tree; §5). Record in
    CLAUDE.md §7 at commit time.
 8. ~~µT-Kernel tick period~~ **RESOLVED — 1 ms** (`config.h:29`; §7 D3).
-9. **Fix the 88 KB error in `docs/PHASE5_DESIGN_sensor_bringup_i2c.md` — STILL
-   OPEN** (§0.1 has the corrected facts to paste).
+9. ~~Fix the 88 KB error~~ **RESOLVED 2026-07-12 — `CLAUDE.md` §2 "Onboard
+   upgrade path" line corrected to "~84 KB firmware upload over I2C at init
+   (86,016 B = 0x8000+0x8000+0x5000)"** (§0.1 has the corrected facts). Note:
+   the live claim was found in `CLAUDE.md`, not
+   `docs/PHASE5_DESIGN_sensor_bringup_i2c.md` as originally named here — that
+   file does not contain an 88 KB/firmware-upload claim on inspection.
 
 **Remaining opens (hardware / datasheet, not source):**
 

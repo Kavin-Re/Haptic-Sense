@@ -76,12 +76,41 @@ Facts, all from SLOS854D:
   only, unconditional, effective regardless of any register state (§8.4.1.3 + 15 kΩ
   output termination).
 - **R-EN-3:** Any EN-low event **invalidates the configured state** until Priority 3
-  runs a re-verify pass (re-write 0x01, re-check sequencer). Rationale: the datasheet is
-  internally ambiguous about the state entered when EN rises with a retained STANDBY=0 —
-  Fig. 17 shows the EN=1 transition landing in Standby, while §8.4.1.4 says the STANDBY
-  bit forces the state. `[UNVERIFIED]` — H-D2 below resolves it on hardware; R-EN-3 makes
-  the design correct under either reading.
-- Answer to Q1: **yes, EN toggling by Priority 1 with zero I2C is safe**, under R-EN-1..3.
+  re-verifies and, if needed, re-initializes. Rationale: the datasheet is internally
+  ambiguous about the state entered when EN rises with a retained STANDBY=0 — Fig. 17
+  shows the EN=1 transition landing in Standby, while §8.4.1.4 says the STANDBY bit
+  forces the state. `[UNVERIFIED]` — H-D2 below resolves it on hardware; R-EN-3 makes the
+  design correct under either reading.
+
+  **Mechanism (F-1, resolved 2026-07-12): readback-verify, never a flag.** An earlier
+  draft of this rule had Priority 1 set a "config invalid" flag on kill and Priority 3
+  clear it after re-init — a bare shared variable written by one task and cleared by
+  another with no atomicity guarantee. The audit (F-1) correctly flagged this as a
+  lost-update race: a kill landing in the exact window Priority 3 is mid-clear can be
+  overwritten and silently dropped, leaving the DRV2605L unconfigured while the rest of
+  the system still believes it's armed — for a hazard-alert wearable, a haptic that is
+  silently dead is the worst-case failure. Fix: Priority 3 never learns about a kill
+  through inter-task signaling at all. Register 0x01 (MODE/STANDBY) is ground truth;
+  Priority 3 reads it back every sensor-loop iteration (throttle frequency TBD, §6.4) and
+  compares against the expected armed encoding (MODE[2:0]==1, STANDBY==0). Any
+  mismatch — EN-low kill, EN glitch, ESD, or anything else — triggers unconditional
+  re-init via the §4 write sequence. This is **Option B** from the audit (the §6.4
+  "optional hardening" idea, promoted here from optional to baseline): it sidesteps the
+  P1→P3 signaling problem by not having one, so there is no cross-task shared state to
+  race on and nothing to lose. Chosen over the counter-based alternative (Option A)
+  because (a) it matches this codebase's existing ownership principle — `app_i2c.c:371`
+  already documents "sensor_task is the sole caller, so no race exists to lose" for the
+  I2C-completion handshake, and readback-verify extends the same sole-owner shape to
+  config validity; (b) it adds zero new responsibility to Priority 1 beyond the GPIO
+  write it already does under R-EN-2, keeping the GPIO-only / never-blocking / < 1 ms
+  invariant untouched — a counter increment, even a single-instruction one, is still one
+  more thing to reason about on the hazard path for no benefit here.
+- **R-EN-4:** Priority 3's readback of register 0x01 (the R-EN-3 mechanism above) is the
+  *only* authority on configured state. No boolean flag, counter, or other variable is
+  shared between Priority 1 and Priority 3 for this purpose. Priority 1's responsibility
+  for the kill path begins and ends at the EN GPIO write (R-EN-2) — it signals nothing
+  and clears nothing.
+- Answer to Q1: **yes, EN toggling by Priority 1 with zero I2C is safe**, under R-EN-1..4.
 
 ---
 
@@ -281,11 +310,15 @@ Resolution: **never rely on defaults for mode-relevant registers** — rows 3–
 table write 0x1A and 0x1D explicitly. (BIDIR_INPUT default 1, Table 25, is consistent
 with the prose's "bidirectional"; the open/closed-loop half is the conflicting part.)
 
-### 6.4 Optional hardening (deferred, not baseline)
+### 6.4 Readback-verify — R-EN-3/R-EN-4 mechanism, BASELINE (promoted 2026-07-12, F-1)
 
-Priority 3 periodic cross-check: once per second, `i2c_rd(0x5A, 0x01, ...)` and assert
-MODE[2:0]==1; on mismatch, log + rewrite. Cheap (one 1-byte read), but adds steady-state
-bus traffic to the 50 Hz pipeline — decide after ToF/IMU timing budget is measured.
+Priority 3 periodic cross-check: `i2c_rd(0x5A, 0x01, ...)` and assert MODE[2:0]==1 &&
+STANDBY==0; on mismatch, re-run the §4 write sequence unconditionally. This is no longer
+optional hardening — it is the sole mechanism implementing R-EN-3/R-EN-4 (§2), replacing
+the earlier flag-based kill-signaling design that the audit found race-prone (F-1). Cheap
+(one 1-byte read) but adds steady-state bus traffic to the 50 Hz pipeline; still open is
+only the *frequency* — every sensor-loop iteration vs a throttled subset (e.g. once per
+second) — decide after ToF/IMU timing budget is measured (§10 item 3).
 
 ---
 
@@ -297,8 +330,13 @@ INIT (P3)   drive EN high → tk_dly_tsk(1) [≥250 µs, §9.3.1] → §4 write 
             → read 0x00, expect DEVICE_ID=7 → haptics ARMED
 HAZARD (P1) rising edge ≥1 µs on IN/TRIG → effect plays (t(start) 0.7 ms, §6.7)
             pulse rate ∝ closing velocity; inter-pulse period > effect duration (T-1)
-KILL (P1)   EN low → guaranteed off (any register state) → sets "config invalid" flag
-RECOVER(P3) sees flag → EN high → re-run §4 rows 1–8 → clear flag (R-EN-3)
+KILL (P1)   EN low (GPIO only, R-EN-2) → guaranteed off (any register state).
+            No flag set — P1's responsibility ends at the GPIO write (R-EN-4).
+VERIFY (P3) every sensor-loop iteration (frequency TBD, §6.4): i2c_rd(0x5A, 0x01) →
+            compare MODE[2:0]==1 && STANDBY==0. Match → no action. Mismatch (kill, EN
+            glitch, or any other cause) → EN high → re-run §4 rows 1–8 → next readback
+            confirms ARMED. (R-EN-3 mechanism; F-1 resolved 2026-07-12 — readback-verify
+            replaces flag-based signaling, eliminating the lost-update race.)
 ```
 
 ---
@@ -334,4 +372,6 @@ I2C and carry the inverse comment.
    (calibration + stored constants). Recommendation: A for first light; revisit after
    H-D3/H-D4 if click sharpness is inadequate.
 2. **IN/TRIG GPIO allocation** (H-D1b) — new pin-map entry.
-3. **Optional MODE watchdog** (§6.4) — defer until 50 Hz pipeline timing is measured.
+3. **Readback-verify polling frequency** (§6.4, mechanism itself now baseline per F-1) —
+   every sensor-loop iteration vs a throttled subset; decide once 50 Hz pipeline timing
+   is measured.

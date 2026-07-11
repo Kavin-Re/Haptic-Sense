@@ -42,7 +42,7 @@ LD1 = **PO1, active HIGH**. Port O carries XSPI1 (PSRAM) on PO0/PO2/PO3/PO4 — 
 ERM coin 10 mm × 3.4 mm (3 V class) driven ONLY through DRV2605L. **NEVER connect any motor to GPIO directly** — GPIO abs max ~20 mA, ERM draws 60–90 mA. Priority 1 task touches EN/GPIO only; DRV2605L I2C configuration happens at init from the Priority 3 task context.
 
 ### Onboard upgrade path (documented, OFF critical path)
-MB1854B camera module (present in kit) carries VL53L5CX @ 0x29 + ISM330DLC (0x6A/0x6B) on I2C1 via FFC CN14. GPIOs: TOF_INT=PQ0, TOF_LPn=PQ5, IMU_INT1=PQ1, IMU_INT2=PQ2, NRST_CAM=PC8, EN_MODULE=PD2. Do not integrate before core pipeline works end-to-end. VL53L5CX limits: 15 Hz @ 8×8 / 60 Hz @ 4×4, ~88 KB firmware upload over I2C at init.
+MB1854B camera module (present in kit) carries VL53L5CX @ 0x29 + ISM330DLC (0x6A/0x6B) on I2C1 via FFC CN14. GPIOs: TOF_INT=PQ0, TOF_LPn=PQ5, IMU_INT1=PQ1, IMU_INT2=PQ2, NRST_CAM=PC8, EN_MODULE=PD2. Do not integrate before core pipeline works end-to-end. VL53L5CX limits: 15 Hz @ 8×8 / 60 Hz @ 4×4, ~84 KB firmware upload over I2C at init (86,016 B = 0x8000+0x8000+0x5000).
 
 ### LOCKED DRIVER DECISIONS (July 10 2026)
 - MPU6050 DLPF_CFG = 4 (~21 Hz bandwidth, under 25 Hz Nyquist for the 50 Hz pipeline) [source: RM-MPU-6000A register map]
