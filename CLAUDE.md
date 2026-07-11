@@ -46,7 +46,7 @@ MB1854B camera module (present in kit) carries VL53L5CX @ 0x29 + ISM330DLC (0x6A
 
 ### LOCKED DRIVER DECISIONS (July 10 2026)
 - MPU6050 DLPF_CFG = 4 (~21 Hz bandwidth, under 25 Hz Nyquist for the 50 Hz pipeline) [source: RM-MPU-6000A register map]
-- MPU6050 accel full-scale range = ±4g (4096 LSB/g) [source: RM-MPU-6000A]
+- MPU6050 accel full-scale range ±4g, AFS_SEL=1, 8192 LSB/g [corrected 2026-07-11 — RM-MPU-6000A §4.18; 4096 LSB/g is the ±8g row]
 - Both MPU6050 settings locked BEFORE Edge Impulse data collection — changing either afterward rescales all collected training samples.
 - DRV2605L = open-loop baseline (ERM + ROM library); closed-loop deferred as a clean add-on per drv2605l_port_design_v1.md §4.2/§5 [source: TI SLOS854D §9.3.1].
 
