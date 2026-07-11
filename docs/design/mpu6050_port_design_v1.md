@@ -1,157 +1,149 @@
-# PHASE5_L2 — VL53L1X ULD Platform Port Design (v2)
+# PHASE5_L2 — MPU6050 IMU Port Design (v1)
 
 Haptic-Sense · TRON Forum Contest 2026 · Review pass 2026-07-09 (chat/Opus)
-Supersedes the Gate-1 design in the areas below; everything not restated here carries over unchanged.
 
-**Review inputs (this pass):** `app_i2c.c` (uploaded, full 449 lines), `vl53l1_platform.h` / `vl53l1_platform.c` / `vl53l1_types.h` (uploaded STSW-IMG009 templates, unfilled).
-**NOT available this pass:** `app_i2c.h` (⇒ `I2C_REG16` literal value unverifiable), `i2c_timing.h` (⇒ `I2C_BUS_HZ` unverifiable), in-repo `API/core/VL53L1X_api.c/.h`, VL53L1X/VL53L5CX datasheet PDFs (announced but not attached — closed via live lookups instead, sources in §9).
+**Review inputs (this pass):** `app_i2c.c` (uploaded, verified byte-identical role to prior pass), **RM-MPU-6000A-00 rev 4.0** (Register Map, 2012-03-09) — cited `{RM §x.y}`, **PS-MPU-6000A-00 rev 3.4** (Product Specification, 2013-08-19) — cited `{PS §x.y}`. All hardware claims below trace to these two uploads unless tagged `[UNVERIFIED → V-n]` (ledger in §8).
+**NOT available:** `app_i2c.h` / `i2c_timing.h` (same gaps as VL53L1X pass), GY-521 breakout schematic (no official one exists — board-level facts are hardware-gated by design).
 
-**Convention:** `[V-n]` = named verification step, listed in §8. Every hardware/technical claim carries either a source citation (§9 key in braces, e.g. `{DS}`) or an `[UNVERIFIED → V-n]` tag.
-
----
-
-## 1. H1 RESOLVED (source level) — register-index byte order
-
-### 1.1 What the sensor requires
-- The VL53L1X register index is **16-bit** — datasheet: "the second byte received provides a 16-bit index, which points to one of the internal 8-bit registers" `{DS}`.
-- The index goes on the wire **MSB first**. Grounding: ST's own reference `vl53l1_platform.c` (as reproduced verbatim on the ST community, ST staff engaged in-thread) serializes `_I2CBuffer[0] = index >> 8; _I2CBuffer[1] = index & 0xFF;` `{ST-PLAT}`. The identical rule is stated by ST staff for the sibling VL53L5CX: "First Register (… registers are 16 bit addresses)" with `data[0] = Reg >> 8` `{ST-L5-PLAT}`.
-
-### 1.2 What the primitive emits — trace through `app_i2c.c`
-1. `i2c_rd/i2c_wr(dev7, reg, regsz, buf, len)` → `i2c_xfer` → `i2c_xfer_once` (app_i2c.c:394-402, 365-392, 312).
-2. `i2c_xfer_once` maps size **symbolically**: `memaddsz = (regsz == I2C_REG16) ? I2C_MEMADD_SIZE_16BIT : I2C_MEMADD_SIZE_8BIT` (app_i2c.c:316-317). **The primitive never compares against the literal 2** — it compares against the symbol `I2C_REG16`.
-3. The mapped size is passed to `HAL_I2C_Mem_Read_DMA` / `HAL_I2C_Mem_Write_DMA` (app_i2c.c:327-333). Byte order is therefore **entirely delegated to ST HAL**.
-4. ST HAL (I2C-v2 peripheral family, DMA Mem path): for `I2C_MEMADD_SIZE_16BIT` the driver prefetches `TXDR = I2C_MEM_ADD_MSB(MemAddress)` and stages `Memaddress = I2C_MEM_ADD_LSB(...)` for the follow-up TXIS interrupt — i.e. **MSB first, then LSB**; the blocking/IT paths (`I2C_RequestMemoryWrite/Read`) do the same ("Send MSB of Memory Address" … "Send LSB of Memory Address") `{HAL-DMA}` `{HAL-BLK}`. Cited source is the STM32H7 HAL (same I2C-v2 IP family as N6). **N6-file confirmation is one grep** `[UNVERIFIED for the N6 file specifically → V-1]`.
-
-### 1.3 Verdict and the one design rule it produces
-Sensor requires 16-bit MSB-first; HAL emits 16-bit MSB-first; the primitive is a transparent pass-through. **Match — H1 is resolved at source level, pending V-1 (grep) and V-5 (wire capture).**
-
-**⚠ RULE (bold constraint): the shim must pass the symbol `I2C_REG16`, never the literal `2`.** The primitive's dispatch is `regsz == I2C_REG16`; if a literal `2` is passed and `I2C_REG16` is not defined as 2, the comparison silently falls to the 8-bit branch — only the index LSB is emitted, the sensor ACKs anyway (register-mapped slaves ACK any index, per the gate-test analysis at app_i2c.c:414-420), and every read returns wrong data with **no error**. `app_i2c.h` was not uploaded, so `I2C_REG16`'s value is `[UNVERIFIED → V-2]`. Using the symbol makes V-2 moot for correctness (it then only matters for documentation).
+**Convention:** identical to the VL53L1X doc — `[V-n]` verification steps, sources in braces, options as A/B for the developer's decision.
 
 ---
 
-## 2. ADDRESS SHIM — verified
+## 0. CROSS-SENSOR CONTAMINATION GUARDS (read first — this is the stated failure mode)
 
-- ULD `dev` parameter carries the **8-bit** I2C address; the device default is **0x52** — datasheet: "uses a default device address of 0x52" `{DS}`; 7-bit equivalent 0x29 = 0x52 ≫ 1 (corroborated: community/ST staff describe 0x52 as the write address, 0x29 as the 7-bit form) `{ADDR}`.
-- The primitive takes a **7-bit** address and re-shifts left at the HAL boundary: `(uint16_t)(dev7 << 1)` at app_i2c.c:327, 331, 342 (verified in uploaded source).
-- Therefore the shim performs **exactly one right shift, in exactly one place** — the entry of each platform function:
+The MPU6050 and VL53L1X share the bus and the primitive but differ on exactly the axes where habit transplants a bug:
 
-  `dev(8-bit, 0x52) ── shim ≫1 ──> dev7(0x29) ── primitive ≪1 ──> 0x52/0x53 on the wire` ✓
+| Property | VL53L1X (prior doc) | MPU6050 (this doc) | Contamination failure |
+|---|---|---|---|
+| Register index width | 16-bit, `I2C_REG16` | **8-bit, `I2C_REG8`** — the protocol sends a single register-address byte `{PS §9.3: master "puts the register address (RA) on the bus" as one byte; RM §3: all addresses 0x0D–0x75}` | Passing `I2C_REG16` emits a phantom high byte; the device treats it as the index and the real index as data — silent garbage |
+| `dev` parameter convention | ULD hands the shim an **8-bit** address (0x52); shim shifts ≫1 | Docs speak **7-bit** natively: 1101000/1101001 `{PS §6.4}` — **pass 0x68/0x69 straight into `i2c_rd/i2c_wr`, NO shift** | Applying the VL53L1X ≫1 habit gives 0x34 — NACK on every transaction |
+| Multi-byte data order | Big-endian (MSB at lower address) | **Same** — `_H` before `_L` `{RM §3 note: "Register Names ending in _H and _L contain the high and low bytes, respectively"}` | None — same reassembly pattern, keep it |
+| Identity check | RdWord 0x010F = 0xEACC | RdByte **0x75 = 0x68** `{RM §4.34: "The default value of the register is 0x68"}` | The value 0x68 coincidentally equals the 7-bit address — it is the register content, not an echo of the address |
 
-  Arithmetic check: 0x52 ≫ 1 = 0x29; 0x29 ≪ 1 = 0x52 (write), | 1 = 0x53 (read, set by hardware from the direction bit).
-- **Failure mode if omitted** (the known highest-risk line): passing `dev = 0x52` straight through as a 7-bit address makes the primitive emit `0x52 << 1 = 0xA4` — a NACK on every transaction, indistinguishable at the ULD level from an unpowered sensor.
-- Derive `dev7` from the `dev` argument on **every call** — do not hard-code 0x29 — so `VL53L1X_SetI2CAddress` remains usable later `{ADDR}`. (Single sensor at default address is the locked project configuration; this is future-proofing, not scope creep.)
+**Closure of a standing `[UNVERIFIED]`:** the gate-test comment in `app_i2c.c:421-424` ("WHO_AM_I=0x75 / expected 0x68: recalled from RM-MPU-6000A, UNVERIFIED") is now **VERIFIED** against the uploaded RM rev 4.0: register 117 (0x75) is WHO_AM_I, default 0x68, `WHO_AM_I[6:1]` = upper 6 bits of the 7-bit address, bits 0 and 7 hard-coded 0, **AD0 not reflected in this register** `{RM §4.34}`. Update the comment; the gate's expected byte stands.
 
 ---
 
-## 3. SECOND ENDIANNESS HAZARD — data words (raised proactively, same severity class as H1)
+## 1. ADDRESS RESOLUTION (item 1)
 
-H1 covers the index bytes. `VL53L1_WrWord/WrDWord/RdWord/RdDWord` additionally move **multi-byte data**, and the Cortex-M55 is little-endian while the VL53L1X stores multi-byte values MSB-at-lower-address: the identification word read at 0x010F is 0xEACC, composed of MODEL_ID 0x010F = 0xEA (the MSB) followed by 0x0110 = 0xCC `{ID}` `{UM2510}`. ST's own template warns exactly here: "fields 'RegisterAdress' and 'value' need to be swapped" for mismatched endianness (uploaded `vl53l1_platform.c`, every function body).
+- The 7-bit address is `b110100X`; the LSB is the **logic level on pin AD0**: AD0 low → **0x68** (`1101000`), AD0 high → **0x69** (`1101001`) `{PS §6.4 I2C ADDRESS table; §9.2}`. Two devices may share a bus this way `{PS §9.2}`.
+- **The GY-521's AD0 strap state is board-level and undocumented** — commonly pulled low by an onboard resistor, but that is memory, not source `[UNVERIFIED → V-1]`. The bus scan IS the verification step, and it is **already implemented**: `app_i2c_gate_test()` (app_i2c.c:427-443) tries 0x68 then 0x69, reads register 0x75, and records both the ACKing address (`stats.gate_addr`) and the WHO_AM_I byte (`stats.gate_whoami`).
+- **Pass criterion:** exactly one of {0x68, 0x69} ACKs AND `gate_whoami == 0x68` `{RM §4.34}`. Both ACKing would mean an address conflict (or a second device); neither means wiring/power.
+- **Driver handling:** probe once at init (reuse the gate-test loop), latch the winner into a file-static `mpu_addr7`, and use it for every subsequent call. Never hard-code either value; fail init loudly (E_NOENT-style) if the probe finds nothing — do not fall back to a guess. **If AD0 is floating rather than strapped** (possible on clone boards), the address can be nondeterministic — the fix is to wire AD0 to GND explicitly `[UNVERIFIED whether your unit straps it → V-1 covers this: if the scan result is unstable across power cycles, strap AD0]`.
+- WHO_AM_I cannot distinguish 0x68 from 0x69 (AD0 not reflected `{RM §4.34}`) — the distinguishing evidence is *which address ACKed*, the whoami byte only confirms the part family.
 
-**⚠ RULE: never `memcpy`/pointer-cast a `uint16_t`/`uint32_t` into the I2C buffer. Serialize explicitly, MSB first:**
+---
+
+## 2. REGISTER-READ DESIGN — byte order and the one-transaction burst (item 2)
+
+### 2.1 Byte order — confirmed big-endian
+`ACCEL_XOUT_H` (0x3B) holds `ACCEL_XOUT[15:8]`, `ACCEL_XOUT_L` (0x3C) holds `[7:0]` `{RM §4.18 register table}`; the general rule is stated at `{RM §3 note}`. Values are **16-bit 2's complement** `{RM §4.18, §4.20 Parameters}`. On the little-endian M55, reassemble explicitly — same rule as VL53L1X doc §3, no memcpy:
 
 ```c
-/* WrWord */  b[0]=(UB)(data>>8);  b[1]=(UB)data;
-/* WrDWord */ b[0]=(UB)(data>>24); b[1]=(UB)(data>>16); b[2]=(UB)(data>>8); b[3]=(UB)data;
-/* RdWord */  *pdata = ((uint16_t)b[0]<<8) | b[1];
-/* RdDWord */ *pdata = ((uint32_t)b[0]<<24)|((uint32_t)b[1]<<16)|((uint32_t)b[2]<<8)|b[3];
+int16_t v = (int16_t)(((uint16_t)buf[H] << 8) | buf[L]);
 ```
 
-This construction is endian-neutral C — correct regardless of host byte order, no `#ifdef` needed.
+### 2.2 The burst is not just an optimization — it is a correctness requirement
+The sensor registers are double-banked: an internal set updates at the Sample Rate, and the user-facing set duplicates it only while the serial interface is idle, which **"guarantees that a burst read of sensor registers will read measurements from the same sampling instant"**; with single-byte reads *the user* must guarantee coherence via the Data Ready interrupt `{RM §4.18, §4.19, §4.20 — stated identically for accel, temp, gyro}`. So six single reads could tear a sample across two instants; one burst cannot.
+
+### 2.3 The transaction
+The output registers are contiguous: accel 0x3B–0x40, temp 0x41–0x42, gyro 0x43–0x48 `{RM §3}` — **14 bytes from 0x3B in one repeated-start read** (burst reads supported, `{PS §9.3 Burst Read Sequence}`):
+
+```c
+/* sensor_task, TK_PRI 3 — ONLY CALL FROM PRIORITY 3 SENSOR TASK */
+static UB imu_buf[32] __attribute__((aligned(32)));   /* 14 used; 32-B aligned+padded per design §4.1 rule */
+
+err = i2c_rd(mpu_addr7, 0x3Bu, I2C_REG8, imu_buf, 14);
+/* buf[0..5]=ax,ay,az  buf[6..7]=temp  buf[8..13]=gx,gy,gz — each MSB-first */
+```
+
+Reading 14 (including temp) rather than two 6-byte reads costs 2 wasted bytes and buys one transaction, one semaphore round-trip, and the same-instant guarantee across accel AND gyro. Die temperature comes free if ever wanted: `°C = raw/340 + 36.53` `{RM §4.19}`.
+
+**HAL Mem path with `I2C_MEMADD_SIZE_8BIT` emits exactly the protocol the MPU6050 expects** (single RA byte, repeated start, auto-incrementing burst) — the 8-bit branch needs no byte-order care at all; H1-class analysis from the VL53L1X doc applies only to the 16-bit branch. What remains symbol-hygiene: **pass `I2C_REG8`, never a literal** (same rule class as VL53L1X doc §1.3; `app_i2c.h` still unuploaded `[→ V-2]`).
 
 ---
 
-## 4. SHIM SPECIFICATION — `vl53l1_platform.c` (target file), all functions
+## 3. INIT SEQUENCE (item 3) — minimum WrByte chain
 
-Context header per CLAUDE.md §3/§7: every function `// ONLY CALL FROM PRIORITY 3 SENSOR TASK`; SPDX Apache-2.0 on our file **only if written clean-room** — the STSW-IMG009 template carries an ST license header; either keep ST's header and fill the bodies (component stays under ST's terms), or write a fresh file against the `API/platform/vl53l1_platform.h` contract under Apache-2.0. **Do not mix headers** (CLAUDE.md §7). License identifier check remains open (`SLA0103` vs `API/LICENSE.txt` body — pre-existing item, unchanged).
+**The device powers up asleep** — `{RM §4 note: "The device will come up in sleep mode upon power-up"}`, PWR_MGMT_1 reset value 0x40 = SLEEP set `{RM §3 reset-values note}`. Nothing streams until SLEEP is cleared. Every step below is `i2c_wr(mpu_addr7, reg, I2C_REG8, &v, 1)` from sensor_task.
 
-| ULD platform fn | Maps to | Notes |
-|---|---|---|
-| `VL53L1_WriteMulti(dev,index,pdata,count)` | `i2c_wr(dev>>1, index, I2C_REG16, pdata, count)` | ULD `pdata` used directly for TX DMA — see §5 buffer rules |
-| `VL53L1_ReadMulti(dev,index,pdata,count)` | `i2c_rd(dev>>1, index, I2C_REG16, pdata, count)` | RX DMA into ULD buffer — see §5 (cache hazard note) |
-| `VL53L1_WrByte` | `i2c_wr(..., &data, 1)` | via 1-byte static buffer or `&data` (stack OK — transfer is synchronous, buffer live until semaphore returns) |
-| `VL53L1_WrWord` / `VL53L1_WrDWord` | serialize per §3 into static `xfer_buf`, then `i2c_wr(..., xfer_buf, 2/4)` | |
-| `VL53L1_RdByte` | `i2c_rd(..., pdata, 1)` | |
-| `VL53L1_RdWord` / `VL53L1_RdDWord` | `i2c_rd(..., xfer_buf, 2/4)`, then reassemble per §3 | |
-| `VL53L1_WaitMs(dev,wait_ms)` | `tk_dly_tsk((RELTIM)wait_ms)` | µT-Kernel API only; kernel tick 1 ms ⇒ actual delay rounds up ≤ +1 tick (same rounding already documented at app_i2c.c:277-281). Never `HAL_Delay` (blocking-HAL red-zone). |
+| # | Reg | Value | Effect | Source |
+|---|---|---|---|---|
+| 0 | 0x75 read | expect 0x68 | identity gate before any write | {RM §4.34} |
+| 1 *(opt)* | 0x6B | 0x80 | DEVICE_RESET — all registers to defaults; **bit self-clears when done** → poll 0x6B until bit7==0 rather than a fixed delay | {RM §4.30 Parameters} |
+| 2 | 0x6B | **0x01** | SLEEP=0, CYCLE=0, TEMP_DIS=0, CLKSEL=1 = PLL w/ X-gyro reference — "highly recommended… for improved stability" over the internal oscillator | {RM §4.30 + CLKSEL table} |
+| 3 | — | wait | PLL settling 1–10 ms {PS §6.6}; gyro ZRO settling **30 ms** {PS §6.1}; accel path wake-up ≥4 ms {RM §4.28}. One `tk_dly_tsk(50)` covers all three with margin |  |
+| 4 | 0x1A | DLPF_CFG (opt. A/B below) | DLPF on ⇒ gyro output rate = **1 kHz** (prerequisite for step 5's arithmetic) | {RM §4.2, §4.3} |
+| 5 | 0x19 | **19** | Sample Rate = Gyro Output Rate / (1 + SMPLRT_DIV) = 1000/(1+19) = **50 Hz** — exact match to the locked pipeline | {RM §4.2} |
+| 6 | 0x1B | 0x00 | FS_SEL=0, ±250 dps (bits [4:3]) | {RM §4.4} |
+| 7 | 0x1C | AFS_SEL (opt. C/D below, bits [4:3]) | accel full-scale | {RM §4.5} |
+| 8 | 0x37 | 0x30 | INT_LEVEL=0 (active-high), INT_OPEN=0 (push-pull), **LATCH_INT_EN=1** (bit5: held until cleared), **INT_RD_CLEAR=1** (bit4: any read clears) | {RM §4.15} |
+| 9 | 0x38 | 0x01 | DATA_RDY_EN — interrupt "each time a write operation to all of the sensor registers has been completed" ⇒ fires at the 50 Hz sample rate | {RM §4.16} |
+| 10 | 0x19–0x1C, 0x37, 0x38 read-back | == written | one 1-byte read per config register; catches any silently-failed write before first-light data is trusted |  |
 
-- **Error mapping:** return `0` on `E_OK`, else a nonzero `int8_t` (suggest `-13`, matching ST's own community-shown convention `{ST-PLAT}`; note the template's `status = 255` in an `int8_t` is just −1). The ULD treats any nonzero as failure — no finer granularity is consumed upstream. Do not retry in the shim; `i2c_xfer` already owns the one-retry + bus-recovery policy (app_i2c.c:357-392) and a second retry layer would multiply the bounded worst case.
-- **`count` width:** ULD `count` is `uint32_t`; the primitive's `len` is `UW`, but app_i2c.c:329/333 casts to `uint16_t` for HAL. VL53L1X ULD transfers are tens of bytes at most (largest is the multi-register result block), so no truncation in practice — assert or comment the ≤65535 assumption. (Contrast: this cast **would** matter for the VL53L5CX upgrade path and its 32 KB `WrMulti` chunks — flag now, act never, per §7.)
-- **Contract source:** implement against the uploaded template signatures (`uint16_t dev, uint16_t index, ...`), which the project has designated as the `API/platform/` authoritative contract; `Example/Inc/vl53l1_platform.h` (HAL-bound demo stub) stays excluded from the build `[assumed per locked project decision; V-3 confirms the uploaded files are byte-identical to in-repo API/platform/]`. The `VL53L1_Dev_t {uint32_t dummy}` struct in the header is dead weight for the ULD call path (all calls pass `uint16_t dev`) — keep for contract fidelity, never instantiate.
+Notes: write order is wake-first (step 2 before 4–9) — the RM does not state whether config writes land during sleep, so don't rely on it. Gyro stays powered even though the feature vector uses no gyro features (CLAUDE.md §6): **CLKSEL=1 uses the X gyro as the clock reference** `{RM §4.30}`; putting gyro axes in standby would silently fall back to the ±5%-tolerance internal oscillator (`{PS §6.6}` CLK_SEL=0 initial tolerance) and drag the 50 Hz timebase with it. The `{RM §4.31}` note confirms standby-ing the clocking axis auto-switches to the 8 MHz oscillator.
 
----
+**Option A vs B — DLPF (step 4), the anti-aliasing decision at 50 Hz sampling (Nyquist 25 Hz):**
+- **A (recommended): DLPF_CFG=4** → accel BW 21 Hz / 8.5 ms delay, gyro 20 Hz / 8.3 ms `{RM §4.3 table}`. Fully below Nyquist — no aliasing into the feature vector; the 8.5 ms group delay is well inside the 20 ms frame and constant (the ML model sees a consistent shift).
+- **B: DLPF_CFG=3** → 44/42 Hz BW, 4.9 ms delay `{RM §4.3}`. Crisper transients for impact-like signatures, but content between 25–44 Hz aliases. Choose only if training data will be collected with the identical setting.
 
-## 5. DMA / CACHE / TASK-CONTEXT CONSTRAINTS (inherited, restated for L2)
-
-- **All nine platform functions run only in sensor_task (TK_PRI 3).** The ULD core is called only from that task, so the primitive's single-client tripwire (`i2c_busy`, app_i2c.c:369-376) is satisfied by construction. If the DRV2605L init later shares the bus, it also runs in TK_PRI 3 context (CLAUDE.md §2) — same client, no conflict.
-- **Static buffers only** (`USE_IMALLOC=0`): one file-static `xfer_buf[8]`, 32-byte aligned and padded per the design §4.1 rule already applied to `gate_buf` (app_i2c.c:64-67), covers all Word/DWord bounces.
-- **Cache:** D-cache is OFF in this build (app_i2c.c:66, 349-353), and `i2c_xfer_once` already invalidates after reads — inert today. **Future D-cache enable hazard:** `ReadMulti` DMA-writes into ULD-owned buffers that are not cache-line aligned/padded; `SCB_InvalidateDCache_by_Addr` on such a buffer can corrupt adjacent data sharing the line. Options for that day, decision deferred:
-  - **Option A** — bounce all `ReadMulti` through a static aligned buffer + `memcpy` out (cost: one copy of ≤ tens of bytes per frame; simplest, matches the existing alignment rule).
-  - **Option B** — audit/align the ULD's result buffers (touches ST-licensed core or wraps it; more fragile).
-  Record as a Red-Zone-3-adjacent note in CLAUDE.md when D-cache work starts.
-- **Timing sanity:** the bus must not exceed the sensor's 400 kHz maximum `{DS}`. `I2C_BUS_HZ` lives in `i2c_timing.h`, not uploaded `[UNVERIFIED → V-4]`.
-- Worst-case per-call latency through the shim is the primitive's bounded ~145 ms failure path (app_i2c.c:357-362); SensorInit's WrByte loop multiplies that only under sustained bus failure, which the caller already treats as init failure, not a hang.
+**Option C vs D — accel full-scale (step 7):**
+- **C (recommended): AFS_SEL=1, ±4 g, 8192 LSB/g** `{RM §4.18 / PS §6.2}` → walking/impact transients at torso height can exceed ±2 g; clipping corrupts the feature vector worse than the halved resolution (0.122 mg/LSB is far below sensor noise anyway, PSD 400 µg/√Hz `{PS §6.2}`).
+- **D: AFS_SEL=0, ±2 g, 16384 LSB/g** — finest resolution; acceptable only if recorded wear data shows no saturation. The range is trainable-data-coupled: **lock it before Edge Impulse data collection and never change it after** (a range change rescales every raw count).
 
 ---
 
-## 6. FIRST-LIGHT TEST PLAN — LOCKED (with corrected target)
+## 4. INT ON PE9 — poll vs interrupt at 50 Hz (item 4)
 
-**★ CORRECTION: the expected `GetSensorId` value is `0xEACC`, not `0xEEAC`.** UM2510: "This function returns the sensor ID which must be 0xEACC" `{UM2510}`. `0xEEAC` (the value previously recorded) appears in *later*-generation ULD code comments and has caused documented confusion — an ST community thread (Jan 2025) reports a genuine VL53L1X returning 0xEEAA against a code comment claiming 0xEEAC, with ST staff acknowledging the family's docs are inconsistent across L1X/L1CB/L3/L4CD silicon iterations `{ID-VAR}`. Consequence for the plan: **log the word, don't hard-fail on it** — see step L3. In-repo tiebreaker: the doc comment on `VL53L1X_GetSensorId` in our v3.5.5 `API/core` copy `[→ V-6]`.
+Electrical: with step 8's config, INT is push-pull, active-high, latched until cleared, and any register read clears it (INT_RD_CLEAR=1 ⇒ the 14-byte burst itself is the clear) `{RM §4.15}`. PE9 = plain input, `GPIO_NOPULL` (push-pull driver needs no pull). Logic level: INT high = 0.9×VLOGIC min `{PS §6.4}`; **the GY-521's VLOGIC net wiring is board-level and unverified** — it must sit at 3.3 V for PE9 compatibility `[UNVERIFIED → V-3: meter/LA on the INT pin at first light; expect clean 0/3.3 V swings]`. Also note `{RM §4.29 / PS §10}`: MPU-6050 requires `I2C_IF_DIS=0` (reset default — no action, listed for completeness).
 
-Sequence (each step names its pass criterion and what a failure isolates):
+**Option A (recommended for bring-up): latched-level poll, no EXTI.** Sensor task runs its existing 20 ms cadence (`tk_dly_tsk`/cyclic pattern); each frame: `HAL_GPIO_ReadPin(PE9)` — if high, burst-read (which clears the latch `{RM §4.15 INT_RD_CLEAR}`); if low, mark IMU frame stale and reuse the last sample (the 12-feature fallback path in CLAUDE.md §6 already anticipates IMU degradation). Zero new ISR surface, zero new kernel objects, and the latch means a data-ready that arrived *between* polls is never missed — level, not edge, is what makes polling safe here.
+- Cost: up to one frame of added latency on the IMU path (bounded 20 ms) and the two clock domains (MPU's ±1% `{PS §6.6 CLK_SEL=1,2,3}` vs kernel tick) beat against each other — occasionally a poll finds no fresh sample or two samples' worth elapsed. At 50 Hz vs 50 Hz nominal this is a ~1%-of-frames effect; the stale-frame flag handles it.
 
-- **L0 — pre-flight (no code changes):** VL53L1X wired to I2C1 (PH9/PC1), XSHUT tied to the 3.3 V rail — datasheet requires XSHUT always driven `{DS}`; tie-high satisfies this and deliberately forfeits hardware-standby/multi-sensor address assignment (accepted: single sensor, default address). GPIO1 → PD0 per CLAUDE.md §2, unused at first light.
-- **L1 — raw-primitive probe (bypasses the shim entirely):** `i2c_rd(0x29, 0x010F, I2C_REG16, buf, 1)` from the existing gate-test slot. Expect `buf[0] == 0xEA` (MODEL_ID at 0x010F) `{ID}`. Passing proves: address shift constant, 16-bit index emission, DMA/IRQ/semaphore chain against a real ACKing slave. Failing with NACK isolates address/wiring; completing with wrong data isolates index byte order → go straight to L5's capture.
-- **L2 — boot gate:** through the shim, poll `VL53L1X_BootState` until 1 (UM2510: 1 = booted) `{UM2510}`. Do not encode an absolute boot-time number — poll with `VL53L1_WaitMs` between attempts and a bounded attempt count.
-- **L3 — identity:** `VL53L1X_GetSensorId`. **Pass = 0xEACC** `{UM2510}`. If a stable other value appears (e.g. 0xEEAA-class per `{ID-VAR}`): the *bus and shim are proven* by stability + the L1 result; log the word, record the module marking, and resolve against the in-repo API comment (V-6) before amending the pass value. 0x0000/0xFFFF = bus-level failure, not an ID variant.
-- **L4 — function:** `SensorInit` → `StartRanging` → poll `CheckForDataReady` → read → `ClearInterrupt` (mandatory before the next datum per UM2510's flow: "a clear interrupt is required after getting ranging data") `{UM2510}` → `StopRanging`. Pass = plausible mm values that track a hand moved in front of the sensor.
-- **L5 — H1 hardware closure (V-5):** logic-analyzer capture (24 MHz sigrok clone, PulseView I2C decoder) of one `WrByte`. Expected wire bytes: `[0x52+W] [idx MSB] [idx LSB] [data]`, e.g. any 0x01xx-register write shows `0x52 0x01 xx dd`. This single capture closes H1 with hardware evidence and doubles as contest documentation.
-
-**Read API for the 50 Hz pipeline: `VL53L1X_GetResult` over `VL53L1X_GetDistance` — confirmed as design intent, existence pending V-7.** Rationale: the per-frame cost is transaction count, and each transaction costs one full semaphore round-trip through `i2c_xfer` plus I2C framing overhead (per transaction ≈ (addr + 2 index + repeated-start + addr + N data) × 9 bits ÷ f_SCL). `GetResult` returns status + distance (+ signal metrics) from one register block read; the `GetDistance` route needs separate `GetRangeStatus` + `GetDistance` transactions for the same decision inputs. At 50 Hz (20 ms budget) both fit comfortably — the win is margin and fewer preemption windows, not feasibility. `GetResult` is not listed in the UM2510 revision consulted; it was added to the ULD after the manual's initial release `[UNVERIFIED for v3.5.5 specifically → V-7]`. Fallback if absent: `GetRangeStatus` + `GetDistance`, or a direct `ReadMulti` of the result block modeled on the API source — decide only after V-7.
-
-Hardware-gated items H2 (XSHUT/INT pin behavior) and H3 (polling timing at 50 Hz) remain open and are exercised by L0/L4 respectively; H2's INT half (PD0 edge behavior, future EXTI migration) is out of first-light scope by design — first light polls.
+**Option B: EXTI on PE9 → `tk_wup_tsk(sensor_task)`.** The MPU becomes the pipeline timebase; jitter collapses to interrupt latency. Constraints if chosen: the handler is registered via `tk_def_int(TA_HLNG)` + `EnableInt` at level 1..15 exactly like the four I2C IRQs (app_i2c.c:36-39, 219-237), does **nothing but** `tk_wup_tsk` — any I2C from the handler is a red-zone violation — and the ToF read then rides the IMU's clock, which slightly complicates the VL53L1X's own intermeasurement cadence bookkeeping.
+- Recommendation: A for first light and the soak; migrate to B only if the logic-analyzer timing campaign (H3-class evidence) shows the poll beat-frequency actually degrading the feature vector. The decision is reversible in one function.
 
 ---
 
-## 7. CORRECTIONS REGISTER — Gate-1 item 9 closed, plus new findings
+## 5. RAW → mg SCALING (item 5)
 
-1. **Sibling design doc (Gate-1 item 9): delete the "88 KB firmware upload" claim from every VL53L1X context.** The VL53L1X has **no firmware upload at all** — its ULD `SensorInit` writes a short default-configuration table via a `WrByte` loop `{UM2510-scope}`. The firmware-upload behavior belongs exclusively to the VL53L5CX family, whose sensor stores firmware in volatile RAM and requires host upload at every power-on `{L5-FW}`.
-2. **The transplanted number is also wrong for the VL53L5CX.** UM2884: `vl53l5cx_init` "copies the firmware (~84 kbytes)" over I2C `{UM2884}`; the ULD source uploads three chunks of 0x8000 + 0x8000 + 0x5000 = 0x15000 = 86,016 bytes = exactly 84 KiB `{L5-CODE}`. **Action: CLAUDE.md §2 (onboard upgrade path line) — change "~88 KB firmware upload" → "~84 KB (86,016 B) firmware upload".**
-3. **CLAUDE.md "Key learnings" / first-light target: `0xEEAC` → `0xEACC`** `{UM2510}`, with the log-don't-hard-fail caveat and `{ID-VAR}` note from §6-L3.
-4. **The "~135 bytes" SensorInit figure is `[UNVERIFIED → V-8]` and probably wrong or mis-scoped.** Recollection (explicitly labeled as memory, not fact): the loop spans registers 0x2D–0x87 = 91 configuration bytes; at 3 wire bytes per WrByte (2 index + 1 data) that is ~273 bytes on the wire — neither number is 135. V-8 (one grep) settles it; until then, record the claim as "a short WrByte loop over the default configuration table (exact count per in-repo `VL53L1X_api.c`)" and drop any specific byte figure from prose.
+Sensitivity table `{RM §4.18 / PS §6.2, identical}`: AFS_SEL 0/1/2/3 → 16384 / 8192 / 4096 / 2048 LSB/g. Output is 16-bit 2's complement `{RM §4.18}`.
+
+For the recommended **±4 g (AFS_SEL=1)**:
+
+```
+mg = raw × 1000 / 8192
+```
+
+Integer form for TK_PRI 3 (no float dependency): `mg = ((int32_t)raw * 1000) / 8192`. Exact-ish check: worst case |raw|=32768 → |raw×1000| = 32,768,000 — fits int32 with 65× headroom; truncation error < 1 mg (< 1 LSB-equivalent). For ±2 g substitute 16384. **Rest-state sanity criterion** (doubles as first-light pass): flat on the bench, X/Y ≈ 0 mg, **Z ≈ +1000 mg** `{PS §7.8: "When the device is placed on a flat surface, it will measure 0g on the X- and Y-axes and +1g on the Z-axis"}` — within initial calibration tolerance ±50 mg X/Y, ±80 mg Z `{PS §6.2 Zero-G Output}`. Gyro at rest: within ±20 dps initial ZRO tolerance `{PS §6.1}`.
 
 ---
+
+## 6. FIRST-LIGHT SEQUENCE (MPU6050)
+
+- **F0** — wiring: GY-521 VCC/GND/SDA/SCL/INT(PE9). Which rail feeds VCC is board-gated: GY-521 carries an onboard regulator on most variants `[UNVERIFIED → V-4: identify the regulator/jumper on your physical unit; if regulator present, 5 V or 3.3 V input both land at 3.3 V logic — confirm VLOGIC per V-3]`. AD0 per §1.
+- **F1** — bus scan: existing `app_i2c_gate_test()`; pass = one address ACKs, whoami 0x68 (§1). This simultaneously closes the CLAUDE.md §2 "verify AD0 by bus scan" item.
+- **F2** — init chain §3 with per-register read-back (step 10).
+- **F3** — rest-state burst: 14-byte read, reassemble, check §5 criteria (Z≈+1000 mg, gyro ≈0).
+- **F4** — INT: LA or scope on PE9 — expect 50 Hz rising edges, each cleared by the following burst read (latched-high intervals ≈ poll latency). Closes V-3 and validates SMPLRT_DIV arithmetic on hardware.
+- **F5** — dynamic: hand-shake the board; ax/ay/az track motion, saturation check at the chosen range (Option C/D revisit point).
+
+## 7. WHAT THIS DOC DOES *NOT* COVER
+Sensor-fusion timing between ToF and IMU inside the 20 ms frame (belongs to the pipeline-integration doc once both sensors have first light); MPU6050 motion-interrupt/DMP features (DMP explicitly out of scope — NPU does the inference, and DMP would add an undocumented firmware dependency); temp compensation.
 
 ## 8. VERIFICATION LEDGER
 
-| ID | Claim gated | Verification step (named, concrete) | Type |
+| ID | Claim gated | Verification step | Type |
 |---|---|---|---|
-| V-1 | N6 HAL emits 16-bit memaddr MSB-first (cited today from same-IP H7 source) | `grep -n "I2C_MEM_ADD_MSB" Drivers/STM32N6xx_HAL_Driver/Src/stm32n6xx_hal_i2c.c` in the project tree; confirm MSB precedes LSB in both `I2C_RequestMemory*` and the `Mem…DMA` prefetch | desk, pre-flash |
-| V-2 | `I2C_REG16` numeric value (moot if shim uses the symbol — §1.3 rule) | read `app_i2c.h` | desk |
-| V-3 | Uploaded platform templates ≡ in-repo `API/platform/` contract | `diff` uploaded files vs `API/platform/` in STSW-IMG009 v3.5.5 (commit 2dcd060) | desk |
-| V-4 | `I2C_BUS_HZ` ≤ 400 kHz `{DS}` | read `i2c_timing.h` | desk |
-| V-5 | **H1 on hardware** — index MSB-first on the wire | §6-L5 logic-analyzer capture of one WrByte | hardware |
-| V-6 | v3.5.5's own documented sensor-ID value | read `VL53L1X_GetSensorId` doc comment in in-repo `API/core/VL53L1X_api.h/.c` | desk |
-| V-7 | `VL53L1X_GetResult` exists in v3.5.5 | `grep -n "VL53L1X_GetResult" API/core/VL53L1X_api.h` | desk |
-| V-8 | SensorInit config-write loop bounds / byte count | read `SensorInit` + `VL51L1X_DEFAULT_CONFIGURATION` in in-repo `VL53L1X_api.c` | desk |
-| H2 | XSHUT tie-high behavior; PD0/INT edge | §6-L0 + later EXTI phase | hardware |
-| H3 | 50 Hz polling timing budget | §6-L4 with `tk_get_otm()` instrumentation | hardware |
-
-Desk items V-1…V-4 and V-6…V-8 are all pre-wiring; **complete them before soldering anything** — they are eight greps/diffs and they de-risk the only two silent-failure modes left (index byte order, symbol-vs-literal regsz).
+| V-1 | GY-521 AD0 strap state (→ 0x68 vs 0x69) | F1 bus scan via existing gate test; if unstable across power cycles, strap AD0 to GND | hardware |
+| V-2 | `I2C_REG8` symbol value (moot if symbol passed, §2.3) | read `app_i2c.h` | desk |
+| V-3 | GY-521 VLOGIC = 3.3 V; INT swings 0/3.3 V into PE9 | meter/LA at F4 | hardware |
+| V-4 | GY-521 regulator presence → correct VCC rail | physical inspection of the unit | hardware |
+| V-5 | `I2C_BUS_HZ` ≤ 400 kHz — MPU6050 fast-mode max `{PS §6.4}`, same ceiling as VL53L1X | read `i2c_timing.h` (shared with VL53L1X ledger V-4) | desk |
+| — | WHO_AM_I 0x75 = 0x68 | **CLOSED this pass** `{RM §4.34}` — update app_i2c.c:421-424 comment | done |
 
 ## 9. SOURCES
-
 | Key | Source |
 |---|---|
-| {DS} | VL53L1X datasheet, st.com/resource/en/datasheet/vl53l1x.pdf — 400 kHz max, default address 0x52, 16-bit index, XSHUT always driven |
-| {UM2510} | UM2510 "A guide to using the VL53L1X ultra lite driver", st.com — sensor ID 0xEACC, BootState semantics, clear-interrupt-after-data flow |
-| {UM2510-scope} | UM2510 — ULD scope ("only four files", turnkey init; no firmware image) |
-| {HAL-DMA} | ST community (STM32H7A3 I2C thread) quoting `HAL_I2C_Mem_*_DMA`: 16-bit case prefetches `I2C_MEM_ADD_MSB`, stages LSB via `Memaddress` for `I2C_Mem_ISR_DMA` |
-| {HAL-BLK} | ST community threads quoting `I2C_RequestMemoryWrite/Read`: "Send MSB of Memory Address" then "Send LSB" |
-| {ST-PLAT} | ST community "VL53L1X problem with write value to register" — ST reference `vl53l1_platform.c` WrByte: `index>>8` then `index&0xFF`; error convention |
-| {ST-L5-PLAT} | ST community "I2C multi-byte read and write functions" (ST staff) — 16-bit register, MSB-first serialization for HAL |
-| {ADDR} | ST community "VL53L1X address changing" — 0x52 write / 0x53 read / 0x29 7-bit equivalence; SetI2CAddress flow |
-| {ID} | ST community "vl53l1" thread — MODEL_ID 0x010F = 0xEA, 0x0110 = 0xCC |
-| {ID-VAR} | ST community "VL53L1X and VL53L4CD GetSensorId" (Jan 2025) — 0xEEAA observed on real L1X, 0xEEAC in code comments, ST staff: docs inconsistent across family |
-| {L5-FW} | Adafruit_VL53L5 README + ST community — VL53L5CX firmware in volatile RAM, host uploads ~84 KB at every power-on |
-| {UM2884} | UM2884 (VL53L5CX ULD guide) — `vl53l5cx_init` "copies the firmware (~84 kbytes)" over I2C |
-| {L5-CODE} | VL53L5CX ULD init source (community-reproduced) — chunks 0x8000+0x8000+0x5000 = 0x15000 = 86,016 B |
+| {RM} | RM-MPU-6000A-00 rev 4.0, "MPU-6000 and MPU-6050 Register Map and Descriptions", 2012-03-09 (uploaded) |
+| {PS} | PS-MPU-6000A-00 rev 3.4, "MPU-6000 and MPU-6050 Product Specification", 2013-08-19 (uploaded) |
