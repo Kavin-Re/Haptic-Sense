@@ -71,7 +71,11 @@ Facts, all from SLOS854D:
 
 - **R-EN-1:** EN (PE7) is asserted high once, during system init, *before* Priority 3
   issues any DRV2605L I2C write, and stays high in normal operation. (Consequence of the
-  "no write with EN low" silent failure.)
+  "no write with EN low" silent failure.) **Ordering rule (audit F-7, added 2026-07-12):
+  IN/TRIG GPIO is configured push-pull and driven low BEFORE EN(PE7) rises; §4 row 8
+  (the MODE=1 arm) must never execute with IN/TRIG unconfigured — a floating trigger
+  input in edge-trigger mode can noise-fire spurious clicks, and a false hazard alert
+  to a visually impaired user is a functional safety event for this product.**
 - **R-EN-2:** Priority 1 may drive EN low at any time as an **emergency kill** — GPIO
   only, unconditional, effective regardless of any register state (§8.4.1.3 + 15 kΩ
   output termination).
@@ -187,7 +191,7 @@ Baseline = **ERM open-loop**, per the datasheet's own recommendation for ROM lib
 
 | # | Reg | Value | Purpose | Source |
 |---|-----|-------|---------|--------|
-| 0 (opt) | 0x01 | 0x80 | DEV_RESET — known-clean state; self-clears; poll 0x01 until bit7==0 (`i2c_rd`, `tk_dly_tsk(1)` between polls, ≤10 ms timeout `[UNVERIFIED]` — reset duration unspecified, H-D7) | §8.4.1.5, Table 5 |
+| 0 (opt) | 0x01 | 0x80 | DEV_RESET — known-clean state; self-clears; poll 0x01 until bit7==0, **bounded in attempts, not wall-clock** (audit F-8, respecified 2026-07-12 — the fix was previously applied only to the MPU6050 sibling via M-2): **≤5 attempts, `tk_dly_tsk(1)` between each `i2c_rd`; exhaustion = fail init loudly, never proceed silently.** A wall-clock budget is fiction through this primitive — each *failed* `i2c_rd` costs up to ~145 ms via the retry+recovery envelope (app_i2c.c:357-362). Matches mpu6050_port_design_v1.md §3 row 1. Actual self-clear duration still unmeasured → H-D7 | §8.4.1.5, Table 5 |
 | 1 | 0x01 | 0x00 | STANDBY=0, MODE=0 — device ready | §9.3.1 step 3, Table 5 |
 | 2 | 0x17 | 0x8B | OD_CLAMP = 3.001 V — full-scale reference in open loop AND mode-independent peak clamp | Eq. 6, §8.5.2.2; calc §4.1 |
 | 3 | 0x1A | 0x36 | N_ERM_LRA=0 (ERM); rest = datasheet defaults (FB_BRAKE_FACTOR=3, LOOP_GAIN=1, BEMF_GAIN=2) | Table 23 |
@@ -197,10 +201,21 @@ Baseline = **ERM open-loop**, per the datasheet's own recommendation for ROM lib
 | 7 | 0x05 | 0x00 | Zero terminator — playback stops after slot 1 | §8.6.5 |
 | 8 | 0x01 | 0x01 | STANDBY=0, MODE[2:0]=1 — external edge trigger armed | Table 5 |
 
-Call shape for every row: `i2c_wr(0x5Au, reg, I2C_REG8, &val, 1)` (app_i2c.c:399).
+Call shape for every row: `i2c_wr(0x5Au, reg, I2C_REG8, drv_buf, 1)` (app_i2c.c:399).
+
+**Buffer rule (added 2026-07-12 — audit F-6c / PROJECT_DEFENSE.md A-3):** all DRV2605L
+transfers (every write above, every readback/poll below) go through one file-static
+`static UB drv_buf[32] __attribute__((aligned(32)));` — 32-byte aligned and padded to
+the M55 cache line, never a bare `&val` stack local. Same rule as the MPU6050's
+`imu_buf` (mpu6050_port_design_v1.md §2.3) and the primitive's own `gate_buf`
+(app_i2c.c:64-67). Inert while D-cache is OFF; mandatory before D-cache is ever
+enabled (gate recorded in CLAUDE.md §3). Open alternative (developer decision): hoist
+a bounce buffer into the primitive itself so no driver can get this wrong.
+
 Post-init sanity read (recommended): `i2c_rd(0x5A, 0x00, I2C_REG8, ...)` — DEVICE_ID[2:0]
 must read **7 = DRV2605L** (Table 4). This is the DRV2605L analogue of the VL53L1X
-`GetSensorId == 0xEEAC` first-light check. Note DIAG_RESULT in the same register clears
+`GetSensorId` stable-ID first-light check (harmonized rule,
+`vl53l1x_port_design.md` §6 step 3). Note DIAG_RESULT in the same register clears
 on read (Table 4) — read 0x00 *before* any diagnostics interpretation, or account for it.
 
 ### 4.1 OD_CLAMP calculation (open loop, formula → substitution → result)
@@ -301,6 +316,11 @@ value. A corrupted write reaching 0x01 is the residual scenario.
    states *except standby*, where only a power cycle recovers I2C (§8.3.11). Interacts
    safely with the existing L1 timeout/recovery in `app_i2c.c` (i2c_xfer retry + bus
    recovery, app_i2c.c:357-392).
+   **Note (audit F-9, added 2026-07-12): the L1 bus-recovery ladder does NOT cover an
+   I2C wedge occurring while the device is in power-on standby — §4 rows 0–1 execute
+   inside that window, EN-toggle is shutdown (not power removal), and breakout VDD is
+   hardwired. Recovery is bench power-cycle. Probability low (two-transaction window);
+   bench-investigate only if observed.**
 
 ### 6.3 Documented datasheet discrepancy (D-1)
 
@@ -355,14 +375,14 @@ I2C and carry the inverse comment.
 
 | # | Item | Verification step |
 |---|------|-------------------|
-| H-D1 | **IN/TRIG wiring** `[UNVERIFIED]`: (a) do the Adafruit and SmartElex breakouts expose IN/TRIG on a header pin? (b) which free Arduino-header GPIO hosts it? | Physical inspection of both breakout silkscreens + Adafruit/SmartElex schematics; then pin-map update in CLAUDE.md §2. **Blocking for Option A.** |
+| H-D1 | **IN/TRIG wiring**: (a) do the Adafruit and SmartElex breakouts expose IN/TRIG on a header pin? (b) which free Arduino-header GPIO hosts it? | **(a) CLOSED per CLAUDE.md §2, 2026-07-10** — Adafruit exposes it as `INT` (max 1.8 V, requires a voltage divider from a 3.3 V GPIO); SmartElex exposes `IN` and `EN` as separate header pins. **(b) still OPEN** — allocate the GPIO, update the CLAUDE.md §2 pin map (+ divider note for the Adafruit board). **Blocking for Option A.** |
 | H-D2 | EN-rise state `[UNVERIFIED]`: with registers retained (MODE=1, STANDBY=0), does EN low→high return the device to armed external-trigger operation without I2C? (Fig. 17 vs §8.4.1.4 ambiguity) | Bench test: configure, pulse IN/TRIG (confirm click), EN low 100 ms, EN high, pulse IN/TRIG. Click without re-init ⇒ resumes; silence ⇒ R-EN-3 re-init is mandatory, not just defensive. |
 | H-D3 | Effect duration `[UNVERIFIED]` (not tabulated in SLOS854D): duration of effect ID 1 in Library B on this ERM → sets minimum inter-pulse period (T-1) | Logic analyzer on OUT+ (or scope with §7.1 RC filter, 100 kΩ/470 pF, Fig. 11) — measure trigger-to-quiescent time; set min pulse period = duration + margin. |
 | H-D4 | Library choice `[UNVERIFIED]` (B assumed from 3 V rating): measured rise/brake vs Table 1 classes B/C/D | Same capture as H-D3; if rise > 80 ms pick C/D per Table 1. Also drives the open-vs-closed-loop decision (§5 options). |
 | H-D5 | Breakout VDD rail `[UNVERIFIED]`: 3.3 V assumed; OD_CLAMP headroom check (§4.1) and OTP infeasibility claim (§5) both reference it | Read breakout schematic; measure VDD pin. If 5 V rail available, headroom concern vanishes (OD_CLAMP math unchanged). |
 | H-D6 | ERM coil impedance vs 4 Ω OC threshold `[UNVERIFIED]` (ZL(th), §6.5): must be > 4 Ω or the driver latches OC_DETECT | Multimeter across motor terminals before wiring. |
 | H-D7 | DEV_RESET self-clear time `[UNVERIFIED]` (unspecified in SLOS854D) | Poll-loop instrumentation on first hardware run; record for CLAUDE.md. |
-| H-D8 | I2C1 SCL frequency ≤ 400 kHz (§6.6) with DRV2605L on the shared bus | Confirm timing constant in `i2c_timing.h` / logic-analyzer capture of SCL. Presumed already met for VL53L1X (also 400 kHz class `[UNVERIFIED]` for that part — check its own datasheet, not this one). |
+| H-D8 | I2C1 SCL frequency ≤ 400 kHz (§6.6) with DRV2605L on the shared bus | **Desk half CLOSED 2026-07-12:** `app_i2c.h:15` `#define I2C_BUS_HZ 400000u` — at the 400 kHz ceiling shared by all three parts (PROJECT_DEFENSE.md BUS-1; note the constant lives in `app_i2c.h`, not `i2c_timing.h`). Remaining: logic-analyzer capture of actual SCL on the wire (PROJECT_DEFENSE.md BUS-2, piggybacks on the first-light capture). |
 
 ---
 
@@ -370,7 +390,9 @@ I2C and carry the inverse comment.
 
 1. **Loop mode:** Option A open-loop (baseline, no calibration) vs Option B closed-loop
    (calibration + stored constants). Recommendation: A for first light; revisit after
-   H-D3/H-D4 if click sharpness is inadequate.
+   H-D3/H-D4 if click sharpness is inadequate. **DECIDED — open-loop locked as baseline
+   (CLAUDE.md §2 locked driver decisions, 2026-07-10); closed-loop remains the
+   documented §4.2 add-on path, deferred not rejected.**
 2. **IN/TRIG GPIO allocation** (H-D1b) — new pin-map entry.
 3. **Readback-verify polling frequency** (§6.4, mechanism itself now baseline per F-1) —
    every sensor-loop iteration vs a throttled subset; decide once 50 Hz pipeline timing

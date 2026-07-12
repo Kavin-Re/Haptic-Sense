@@ -128,9 +128,9 @@ Hardware-gated items H2 (XSHUT/INT pin behavior) and H3 (polling timing at 50 Hz
 | V-1 | N6 HAL emits 16-bit memaddr MSB-first (cited today from same-IP H7 source) | `grep -n "I2C_MEM_ADD_MSB" Drivers/STM32N6xx_HAL_Driver/Src/stm32n6xx_hal_i2c.c` in the project tree; confirm MSB precedes LSB in both `I2C_RequestMemory*` and the `Mem…DMA` prefetch | desk, pre-flash |
 | V-2 | `I2C_REG16` numeric value (moot if shim uses the symbol — §1.3 rule) | read `app_i2c.h` | desk |
 | V-3 | Uploaded platform templates ≡ in-repo `API/platform/` contract | `diff` uploaded files vs `API/platform/` in STSW-IMG009 v3.5.5 (commit 2dcd060) | desk |
-| V-4 | `I2C_BUS_HZ` ≤ 400 kHz `{DS}` | read `i2c_timing.h` | desk |
+| V-4 | `I2C_BUS_HZ` ≤ 400 kHz `{DS}` | **CLOSED 2026-07-12:** `app_i2c.h:15` `#define I2C_BUS_HZ 400000u` (constant lives in `app_i2c.h`, not `i2c_timing.h`; wire-level capture remains — PROJECT_DEFENSE.md BUS-2) | done |
 | V-5 | **H1 on hardware** — index MSB-first on the wire | §6-L5 logic-analyzer capture of one WrByte | hardware |
-| V-6 | v3.5.5's own documented sensor-ID value | read `VL53L1X_GetSensorId` doc comment in in-repo `API/core/VL53L1X_api.h/.c` | desk |
+| V-6 | v3.5.5's own documented sensor-ID value | **EXECUTED 2026-07-12:** in-repo `API/core/VL53L1X_api.h:197` says 0xEEAC — conflicting with UM2510's 0xEACC, confirming ST doc drift ({ID-VAR}). Resolution = this doc's §6-L3 log-don't-hard-fail rule, now harmonized into v1 §6 step 3 (PROJECT_DEFENSE.md A-1) | done |
 | V-7 | `VL53L1X_GetResult` exists in v3.5.5 | `grep -n "VL53L1X_GetResult" API/core/VL53L1X_api.h` | desk |
 | V-8 | SensorInit config-write loop bounds / byte count | read `SensorInit` + `VL51L1X_DEFAULT_CONFIGURATION` in in-repo `VL53L1X_api.c` | desk |
 | H2 | XSHUT tie-high behavior; PD0/INT edge | §6-L0 + later EXTI phase | hardware |

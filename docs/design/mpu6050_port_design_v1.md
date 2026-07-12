@@ -18,7 +18,7 @@ The MPU6050 and VL53L1X share the bus and the primitive but differ on exactly th
 | Register index width | 16-bit, `I2C_REG16` | **8-bit, `I2C_REG8`** — the protocol sends a single register-address byte `{PS §9.3: master "puts the register address (RA) on the bus" as one byte; RM §3: all addresses 0x0D–0x75}` | Passing `I2C_REG16` emits a phantom high byte; the device treats it as the index and the real index as data — silent garbage |
 | `dev` parameter convention | ULD hands the shim an **8-bit** address (0x52); shim shifts ≫1 | Docs speak **7-bit** natively: 1101000/1101001 `{PS §6.4}` — **pass 0x68/0x69 straight into `i2c_rd/i2c_wr`, NO shift** | Applying the VL53L1X ≫1 habit gives 0x34 — NACK on every transaction |
 | Multi-byte data order | Big-endian (MSB at lower address) | **Same** — `_H` before `_L` `{RM §3 note: "Register Names ending in _H and _L contain the high and low bytes, respectively"}` | None — same reassembly pattern, keep it |
-| Identity check | RdWord 0x010F = 0xEACC | RdByte **0x75 = 0x68** `{RM §4.34: "The default value of the register is 0x68"}` | The value 0x68 coincidentally equals the 7-bit address — it is the register content, not an echo of the address |
+| Identity check | RdWord 0x010F — stable ID word per the harmonized rule (`vl53l1x_port_design.md` §6 step 3: ST docs inconsistent — 0xEEAC/0xEACC/0xEEAA all attested; log, don't hard-fail) | RdByte **0x75 = 0x68** `{RM §4.34: "The default value of the register is 0x68"}` | The value 0x68 coincidentally equals the 7-bit address — it is the register content, not an echo of the address |
 
 **Closure of a standing `[UNVERIFIED]`:** the gate-test comment in `app_i2c.c:421-424` ("WHO_AM_I=0x75 / expected 0x68: recalled from RM-MPU-6000A, UNVERIFIED") is now **VERIFIED** against the uploaded RM rev 4.0: register 117 (0x75) is WHO_AM_I, default 0x68, `WHO_AM_I[6:1]` = upper 6 bits of the 7-bit address, bits 0 and 7 hard-coded 0, **AD0 not reflected in this register** `{RM §4.34}`. Update the comment; the gate's expected byte stands.
 
@@ -146,10 +146,10 @@ Closes M-4 together with F-6d at Phase 6 handoff design.
 | ID | Claim gated | Verification step | Type |
 |---|---|---|---|
 | V-1 | GY-521 AD0 strap state (→ 0x68 vs 0x69) | F1 bus scan via existing gate test; if unstable across power cycles, strap AD0 to GND | hardware |
-| V-2 | `I2C_REG8` symbol value (moot if symbol passed, §2.3) | read `app_i2c.h` | desk |
+| V-2 | `I2C_REG8` symbol value (moot if symbol passed, §2.3) | **CLOSED 2026-07-12:** `app_i2c.h:19` `#define I2C_REG8 1u` (`== I2C_MEMADD_SIZE_8BIT` per the header's own comment) | done |
 | V-3 | GY-521 VLOGIC = 3.3 V; INT swings 0/3.3 V into PE9 | meter/LA at F4 | hardware |
 | V-4 | GY-521 regulator presence → correct VCC rail | physical inspection of the unit | hardware |
-| V-5 | `I2C_BUS_HZ` ≤ 400 kHz — MPU6050 fast-mode max `{PS §6.4}`, same ceiling as VL53L1X | read `i2c_timing.h` (shared with VL53L1X ledger V-4) | desk |
+| V-5 | `I2C_BUS_HZ` ≤ 400 kHz — MPU6050 fast-mode max `{PS §6.4}`, same ceiling as VL53L1X | **CLOSED 2026-07-12:** `app_i2c.h:15` `#define I2C_BUS_HZ 400000u` (constant lives in `app_i2c.h`, not `i2c_timing.h`; wire-level capture remains — PROJECT_DEFENSE.md BUS-2) | done |
 | — | WHO_AM_I 0x75 = 0x68 | **CLOSED this pass** `{RM §4.34}` — update app_i2c.c:421-424 comment | done |
 
 ## 9. SOURCES

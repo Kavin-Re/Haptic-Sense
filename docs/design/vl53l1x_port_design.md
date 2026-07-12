@@ -291,12 +291,21 @@ All entry points below verified against `API/core/VL53L1X_api.{c,h}` in-repo
    powered for seconds before sensor_task runs — expect this to pass on the first
    read; poll with a bounded timeout anyway.
 3. **Sensor ID sanity check** — `VL53L1X_GetSensorId(dev, &id)`
-   (`VL53L1X_api.c:497-505`); **`id` must equal `0xEEAC`** (`api.h:197`). This
-   single `RdWord` of a 16-bit register (`VL53L1_IDENTIFICATION__MODEL_ID` =
+   (`VL53L1X_api.c:497-505`). This single `RdWord` of a 16-bit register
+   (`VL53L1_IDENTIFICATION__MODEL_ID` =
    0x010F, `api.h:74`) exercises the entire shim — address shift §2.1, 16-bit
-   MSB-first index §2.2 (first hardware run of `regsz==2`), data byte order §2.3 —
-   BEFORE any distance value is trusted. Anything but 0xEEAC = debug the shim,
-   not the ranging config. **Best first-light test.**
+   MSB-first index §2.2 (first hardware run of `regsz==I2C_REG16`), data byte
+   order §2.3 — BEFORE any distance value is trusted. **Best first-light test.**
+   **Pass rule (harmonized 2026-07-12 — supersedes this doc's earlier "must
+   equal 0xEEAC / anything else = debug the shim" hard-fail; audit F-3,
+   PROJECT_DEFENSE.md A-1):** ST documents the expected value inconsistently
+   across the family — in-repo `api.h:197` says 0xEEAC (citation verified
+   2026-07-12), UM2510 says 0xEACC, and a real L1X has been field-reported
+   returning 0xEEAA (`vl53l1x_port_design_v2_reconciliation.md` §6-L3,
+   {ID-VAR}). Therefore: **log and record any STABLE ID word; hard-fail only
+   on 0x0000/0xFFFF or no-ACK — those are bus conditions, not ID variants.**
+   A stable unexpected word means the bus and shim are PROVEN — record the
+   module marking and resolve the value; do not debug the shim.
 4. `VL53L1X_SensorInit(dev)` (`VL53L1X_api.c:178-204`) — the 91-register `WrByte`
    loop (§0.1), then **internally**: `StartRanging` → poll `CheckForDataReady`
    with `VL53L1_WaitMs(dev,1)` per iteration, bounded at 1000 iterations
@@ -522,8 +531,10 @@ or datasheet work, listed at the bottom.
 
 **Remaining opens (hardware / datasheet, not source):**
 
-- **H1 — First `regsz==2` hardware proof:** `GetSensorId` == 0xEEAC at first
-  light (§6 step 3). The L1 gate test only exercised `I2C_REG8` (`app_i2c.c:435`).
+- **H1 — First `regsz==I2C_REG16` hardware proof:** `GetSensorId` returns a
+  stable ID word at first light (§6 step 3 harmonized pass rule — log the value;
+  only 0x0000/0xFFFF/no-ACK is failure). The L1 gate test only exercised
+  `I2C_REG8` (`app_i2c.c:435`).
 - **H2 — GPIO1 idle level / pull-up voltage on the 7SEMI breakout** before the
   EXTI switch; possibly reg 0x2F (and 0x2E) bit 0 = 1 for AVDD-level pull-ups
   (`VL53L1X_api.c:62-63`; §6.1). Evidence = LA trace.

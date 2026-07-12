@@ -4,6 +4,10 @@ Project: Haptic-Sense (TRON Forum Contest 2026) · Audit pass 2026-07-11 (chat/F
 Type: adversarial review. Verdicts: **PASS** / **VIOLATION** / **VIOLATION RISK** / **UNVERIFIED**.
 Locked decisions honored, not re-litigated: MPU6050 DLPF_CFG=4, ±4 g; DRV2605L open-loop baseline.
 
+> **Snapshot of 2026-07-11.** Several findings below were fixed after this report was
+> written; the §7 finding register is historical. For live dispositions see
+> `docs/PROJECT_DEFENSE.md` §3.1. (Note added 2026-07-12.)
+
 **Evidence base (files read in full this pass):**
 - `app_i2c.c` — 449 lines, uploaded (commit fc6ff88 lineage)
 - `drv2605l_port_design_v1.md` — 338 lines ("DRV doc")

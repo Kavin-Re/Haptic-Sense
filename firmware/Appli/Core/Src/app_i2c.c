@@ -418,10 +418,12 @@ ER i2c_wr(UB dev7, UW reg, UINT regsz, const UB *buf, UW len)
  * — a wrong index returns wrong DATA, it does not NACK — so a wrong register
  * constant below can only change the printed whoami byte, never flip the
  * gate to failure. The gate fails ONLY on real bus/DMA/IRQ failure.
- * WHO_AM_I=0x75 / expected 0x68: recalled from RM-MPU-6000A, UNVERIFIED
- * (no datasheet on disk; web lookup unavailable this session). Verification
- * = the printed whoami on first hardware run; if it isn't 0x68, check the
- * register map before touching the DMA path — the DMA is proven either way.
+ * WHO_AM_I=0x75 / expected 0x68: VERIFIED against RM-MPU-6000A rev 4.0 §4.34
+ * (2026-07-11 design pass, docs/design/mpu6050_port_design_v1.md §0): register
+ * 117 (0x75) default 0x68; AD0 is NOT reflected in this register, so the
+ * whoami byte confirms the part family only — which of 0x68/0x69 ACKed is the
+ * AD0 evidence. If the printed whoami isn't 0x68, check wiring/part before
+ * touching the DMA path — the DMA is proven either way.
  * // ONLY CALL FROM PRIORITY 3 SENSOR TASK
  */
 void app_i2c_gate_test(void)

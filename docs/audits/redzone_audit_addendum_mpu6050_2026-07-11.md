@@ -3,6 +3,11 @@
 Project: Haptic-Sense · Addendum to `redzone_audit_crosscutting_2026-07-11.md` · Pass 2026-07-11 (chat/Fable)
 Scope per instruction: **items 1, 2, 4, 5 only**, MPU6050 driver design. Original findings F-1…F-9, U-1 stand unchanged; VL53L1X and DRV2605L are not re-audited here (note: they did not pass clean — F-1 and F-4 remain open high-severity items in the base report).
 
+> **Snapshot of 2026-07-11.** Findings below (including M-1/M-2/M-3, and the base
+> report's F-1/F-4) were fixed after this report was written; the finding register is
+> historical. For live dispositions see `docs/PROJECT_DEFENSE.md` §3.1. (Note added
+> 2026-07-12.)
+
 **Evidence added this pass:**
 - `mpu6050_port_design_v1.md` — 150 lines, the actual MPU6050 IMU Port Design v1, 2026-07-09 ("MPU doc"). **A-1 is CLOSED.**
 - `vl53l1x_port_design_v2_reconciliation.md` — 158 lines. Content matches the v2 pass already in evidence (the previously mislabeled file); all base-report cross-references to "L1X-v2" carry over unchanged. Its V-1 note (N6 HAL grep still pending, L1X-v2:23) does not alter F-5.

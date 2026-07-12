@@ -82,7 +82,8 @@ After every I2C DMA completion, before signalling the inference semaphore:
 ```c
 SCB_InvalidateDCache_by_Addr((uint32_t*)sensor_buf, sizeof(sensor_buf));
 ```
-NPU-managed buffers are covered by the `--cache-maintenance` flag in `user_neuralart.json`.
+NPU-managed buffers are covered by the `--cache-maintenance` flag in `user_neuralart.json` — that flag covers ONLY NPU buffers, not the I2C DMA buffers.
+**D-cache enable is GATED on closing F-6a (write-side clean in the primitive), F-6b (ULD bounce buffer in the shim), F-6c (DRV2605L buffer rule) — see `docs/PROJECT_DEFENSE.md` §2.2.** D-cache is OFF today (`app_config.h:21`); flipping it without those three fixes arms three latent corruption defects at once.
 
 ### Preemption instrumentation (from Day 1 of task code, guard with `#ifdef DEBUG_TIMING`)
 - GPIO method for logic analyzer (contest evidence): PH5 (D0) set at hazard-signal, PD6 (D1) set at haptic-EN. Δt(D0→D1) on PulseView = preemption latency. LA: 24 MHz sigrok clone (verify `sigrok-cli --scan`).
@@ -127,7 +128,7 @@ Fallback BSP: official tron-forum/mtk3_bsp2 **v1.00.04 (May 2026) officially sup
 - Label: Hazard = distance < 80 cm AND closing velocity > 20 cm/s
 - Model: 3-layer FC 15→32→16→1 sigmoid. NPU-safe ops ONLY: Conv1D/2D, DepthwiseConv, FullyConnected, ReLU, Sigmoid, BatchNorm. **NEVER LSTM/GRU/attention** — unsupported ops fall back to CPU silently, 10–30× slower, no error.
 - Verify order: CPU inference → validate test vectors → enable NPU → compare NPU vs CPU outputs → measure `inference_ms` via `tk_get_otm()`.
-- Haptic semantics: intensity/pattern-graded urgency (pulse rate ∝ closing velocity). Single-zone ToF gives NO direction — never claim directional feedback in code comments or docs.
+- Haptic semantics: urgency graded by pulse rate (∝ closing velocity); intensity banding deferred (drv2605l_port_design_v1.md §3). Single-zone ToF gives NO direction — never claim directional feedback in code comments or docs.
 
 ## 7. CODE STANDARDS
 
