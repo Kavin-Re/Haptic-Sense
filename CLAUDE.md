@@ -33,7 +33,9 @@ Developer: solo BTech student, **zero prior experience** in RTOS, ML training, F
 Adafruit breakout exposes IN/TRIG as pin labeled `INT` (max 1.8V — requires voltage divider from a 3.3V GPIO) [source: Adafruit DRV2605L pinouts page, learn.adafruit.com]. SmartElex breakouts expose `IN` and `EN` as separately-labeled header pins [source: physical inspection of board silkscreen, July 10 2026]. All vendor breakouts wire the same DRV2605L IC pins — one firmware, interchangeable boards [source: TI SLOS854D pin functions, ti.com].
 
 ### Arduino header pin map (subset in use)
-D15/PH9=SCL · D14/PC1=SDA · D8/PE7=DRV_EN · D7/PD6=**TIMING_D1** · D4/PH5=**TIMING_D0** · D3/PE9=IMU_INT · D2/PD0=TOF_INT · IN/TRIG=[UNVERIFIED — GPIO not yet allocated, H-D1b]
+D15/PH9=SCL · D14/PC1=SDA · D8/PE7=DRV_EN · D7/PD6=**TIMING_D1** · D6/PE13=**DRV_TRIG** · D4/PH5=**TIMING_D0** · D3/PE9=IMU_INT · D2/PD0=TOF_INT
+
+**DRV_TRIG resolved (HAP-T5 CLOSED, 2026-08-26):** D6 = **PE13** — verified against the MB1939 Rev C-02 schematic, sheet 9 (Arduino/ST Zio header, CN11 pin 7). Free, GPIO-output capable, not shared with any other onboard peripheral (checked against camera FFC CN14 and every other schematic sheet — no aliasing). **D6 (PE13) and D7 (PD6, TIMING_D1) are different pins** — do not conflate. Fallback: D5 = PE10, equally verified free, recorded as the alternate if D6 is ever needed for something else.
 
 ### Onboard LED (HARDWARE-CONFIRMED 2026-07-05, Phase 3)
 LD1 = **PO1, active HIGH**. Port O carries XSPI1 (PSRAM) on PO0/PO2/PO3/PO4 — the memory the app executes from. **Configure ONLY PO1, pin-masked calls only**: `HAL_GPIO_Init` (masked RMW) + `HAL_GPIO_TogglePin` (atomic BSRR) confirmed working on hardware with XSPI1 untouched. Never `GPIO_PIN_All` / port-wide writes on port O. Verified against source: `__HAL_RCC_GPIOO_CLK_ENABLE()` exists (`stm32n6xx_hal_rcc.h:981`); `GPIOO` resolves to secure alias `GPIOO_S` (correct for this TrustZone build). LD2 (red, PG10, active LOW) may indicate BOOTFAILEDN — leave untouched.

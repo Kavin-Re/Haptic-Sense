@@ -154,7 +154,7 @@ void hazard_fire_haptic(UW now_tick)
 
 Urgency grading: P1 maps closing velocity → trigger period, clamped to **[HAPTIC_MIN_PERIOD (R-3), 1000 ms]**. Faster approach = faster clicks. Effect content itself never changes at runtime (that would be I2C).
 
-**DRV_TRIG pin: NOT YET ASSIGNED (HAP-T5, open).** Candidates D5/D6 — verify MCU port against MB1939 schematic before implementation. **Blocker for coding §5; §§3–4 are unblocked.**
+**DRV_TRIG pin: D6 / PE13 (HAP-T5 CLOSED 2026-08-26).** Verified against the MB1939 Rev C-02 schematic, sheet 9 (Arduino/ST Zio header, CN11 pin 7) — free, GPIO-output capable, not shared with any onboard peripheral (cross-checked against camera FFC CN14 and every other schematic sheet). **D6 (PE13) is a different pin from D7 (PD6, TIMING_D1)** — do not conflate. Fallback: D5 / PE10, equally verified free, recorded as the alternate. §5 is now unblocked for implementation.
 
 ## 6. Runtime watchdog (P3, low cadence — e.g., every 100th sensor cycle ≈ 2 s)
 
@@ -164,6 +164,7 @@ Read 0x00 once; OVER_TEMP (bit 1) and OC_DETECT (bit 0) are **latching, clear-on
 
 | ID | Test | Pass criterion |
 |---|---|---|
+| ~~HAP-T5~~ | ~~Pin allocation for DRV_TRIG~~ | CLOSED 2026-08-26: D6/PE13 assigned — MB1939 Rev C-02 schematic sheet 9, verified 2026-08-26; fallback D5/PE10 recorded |
 | HAP-T8 | EN low→high cycle, then GPIO edge, no I2C | Effect fires (else R-1 becomes permanent) |
 | HAP-T9 | Scope OUT± envelope for effect ID 1, Library B | Duration measured; R-3 floor recomputed = dur × 1.2 |
 | ~~HAP-T10~~ | ~~Effect table lookup~~ | CLOSED 2026-07-19: ID 1 = Strong Click 100%; fallback ID 4 = Sharp Click 100% |

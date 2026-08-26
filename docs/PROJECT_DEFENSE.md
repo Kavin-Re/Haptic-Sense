@@ -311,6 +311,19 @@ F-6b, and F-6c first.** (The audit recommends recording this line in CLAUDE.md �
 A item A-9.) The MPU6050 side is already safe by design: `imu_buf[32]
 __attribute__((aligned(32)))` (MPU doc §2.3; addendum closure note).
 
+**Soak-test caveat and mitigation ordering (added 2026-08-26).** D-cache is currently
+DISABLED. The CLAUDE.md §3 cache-maintenance rule (`SCB_InvalidateDCache_by_Addr` after
+I2C DMA) has therefore never been exercised — **including through the Phase 4 91k-frame
+soak** (`docs/evidence/phase4/phase4_soak.log`): that soak's `canary_err=0` result says
+nothing about cache coherency, because the code path it would have stressed was never
+live. Phase 6 NPU deployment requires D-cache ON (`--cache-maintenance` in
+`user_neuralart.json`, CLAUDE.md §3/§5) — enabling it will activate every latent
+coherency bug in the I2C path simultaneously (F-6a/F-6b/F-6c above), with no soak
+evidence to fall back on. **MITIGATION: enable D-cache during single-sensor bring-up,
+not during Phase 6** — closing F-6a–F-6c against one sensor at a time, on hardware,
+before the NPU pipeline adds its own concurrent buffer traffic on top. See §3.2 L1-*
+below (L1-10 through L1-14) for the specific open items this gates.
+
 ### 2.3 The M-4 staleness flag — F-1's race, queued for Phase 6
 
 **The mechanism.** The MPU6050 design's Option A marks an IMU frame "stale" when INT is
@@ -500,6 +513,10 @@ edit (requires Kavin's approval per Appendix A) · **hardware** = bench/LA/meter
 | L1-8 | audit F-5 | `HAL_I2C_Mem_Write_DMA`/`Read_DMA` **entry** may busy-wait on BUSY-flag before starting (IT-variant precedent on ST forum) | `grep -n "WaitOnFlag\|WaitOnTXIS\|WaitOnSTOP" stm32n6xx_hal_i2c.c` within both function bodies; record max spin bound in CLAUDE.md if nonzero | desk | OPEN / before Phase 6 timing analysis (a bounded P3 spin is legal but must be *known*) |
 | L1-9 | audit item 1 note | `HAL_GPIO_WritePin` uses BSRR (atomic per-pin) on the N6 HAL — assumed for the dual-writer EN pin (P3 init + P1 kill) | One grep in `stm32n6xx_hal_gpio.c` | desk | OPEN / before DRV implementation |
 | L1-10 | audit F-6a | Write-side `SCB_CleanDCache_by_Addr` before TX DMA | Add to primitive at D-cache-enable milestone | code | OPEN-LATENT / **gates D-cache enable** |
+| L1-11 | (new, `app_i2c.h` review 2026-08-26) | 7-bit/8-bit address-width contract not stated in `app_i2c.h` — only the `dev7` parameter name hints at it; the known failure mode (VL53L1X ULD's native 8-bit `0x52` vs. this primitive's 7-bit-only input, `0x52<<1=0xA4` → NACK on every transaction) is documented only in `vl53l1x_port_design.md` §2.1, never in the header itself | Add an explicit header comment on `i2c_rd`/`i2c_wr` stating the 7-bit-only contract and citing the failure mode | doc | OPEN / before any driver author reads only the header |
+| L1-12 | (new, `app_i2c.h` review 2026-08-26) | Return-code contract undocumented in the header: `E_IO` conflates DMA-start failure with device NACK (`app_i2c.c:334-335`, `:82-88`); `E_TMOUT` already reflects a completed retry+recovery cycle costing up to ~145 ms (`app_i2c.c:357-392`); `E_OBJ` (single-client reentrancy guard, `app_i2c.c:374-375`) is unmentioned; `app_i2c_init` can also return `E_PAR` or a raw semaphore-creation error, likewise unmentioned | Add a return-code table to the header's doc comment | doc | OPEN / before driver error-handling code is written |
+| L1-13 | (new, `app_i2c.h` review 2026-08-26); relates to L1-10/F-6a, TOF-13/F-6b, HAP-8/F-6c | Header states no buffer-alignment/cache-maintenance contract for callers — the read-invalidate-only asymmetry (no write-side clean, `app_i2c.c:349-353`) and the implicit 32-byte-alignment expectation are invisible from `app_i2c.h` | Add a header comment stating alignment/cache expectations, cross-referencing the D-cache-enable gate (§2.2) | doc | OPEN / **gates D-cache enable**, same milestone as L1-10 |
+| L1-14 | (new, `app_i2c.h` review 2026-08-26); relates to TOF-5 (value question, closed) | `I2C_REG16` header comment (`app_i2c.h:20`, "== I2C_MEMADD_SIZE_16BIT") is numerically false — `2u` vs. HAL's `0x10`; harmless today because `app_i2c.c:316` dispatches symbolically on the project's own symbol, not the literal, but the comment recreates the literal-vs-symbol ambiguity F-4 already had to fix once | Correct or remove the comment's false HAL-equivalence claim | doc | OPEN / low urgency, doc-hygiene |
 
 #### Phase 6 gates & documentation actions
 
