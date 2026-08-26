@@ -100,7 +100,57 @@ Electrical: with step 8's config, INT is push-pull, active-high, latched until c
 **Option A (recommended for bring-up): latched-level poll, no EXTI.** Sensor task runs its existing 20 ms cadence (`tk_dly_tsk`/cyclic pattern); each frame: `HAL_GPIO_ReadPin(PE9)` — if high, burst-read (which clears the latch `{RM §4.15 INT_RD_CLEAR}`); if low, mark IMU frame stale and reuse the last sample (the 12-feature fallback path in CLAUDE.md §6 already anticipates IMU degradation). Zero new ISR surface, zero new kernel objects, and the latch means a data-ready that arrived *between* polls is never missed — level, not edge, is what makes polling safe here.
 - Cost: up to one frame of added latency on the IMU path (bounded 20 ms) and the two clock domains (MPU's ±1% `{PS §6.6 CLK_SEL=1,2,3}` vs kernel tick) beat against each other — occasionally a poll finds no fresh sample or two samples' worth elapsed. At 50 Hz vs 50 Hz nominal this is a ~1%-of-frames effect; the stale-frame flag handles it.
 
-**Option B: EXTI on PE9 → `tk_sig_sem(imu_data_ready_sem)`.** The MPU becomes the pipeline timebase; jitter collapses to interrupt latency. **Standardized 2026-07-11 (audit M-3): `tk_sig_sem`, not `tk_wup_tsk`** — count-carrying semantics mean a data-ready event that fires while sensor_task is mid-frame is never lost (a `tk_wup_tsk` wake-count can saturate/collapse under the same condition), and this matches the VL53L1X production EXTI path (`vl53l1x_port_design.md` §6.1: PD0 handler signals a semaphore that sensor_task waits on) and the project's paired-semaphore architecture (CLAUDE.md §3). Constraints if chosen: the handler is registered via `tk_def_int(TA_HLNG)` + `EnableInt` at level 1..15 exactly like the four I2C IRQs (app_i2c.c:36-39, 219-237), does **nothing but** `tk_sig_sem` — any I2C from the handler is a red-zone violation, kernel-legal level, otherwise identical to the prior design — and the ToF read then rides the IMU's clock, which slightly complicates the VL53L1X's own intermeasurement cadence bookkeeping.
+**Option B: EXTI on PE9 → `tk_sig_sem(imu_drdy_sem)`.** The MPU becomes the pipeline timebase; jitter collapses to interrupt latency. **Standardized 2026-07-11 (audit M-3): `tk_sig_sem`, not `tk_wup_tsk`** — count-carrying semantics mean a data-ready event that fires while sensor_task is mid-frame is never lost (a `tk_wup_tsk` wake-count can saturate/collapse under the same condition), and this matches the VL53L1X production EXTI path (`vl53l1x_port_design.md` §6.1: PD0 handler signals a semaphore that sensor_task waits on) and the project's paired-semaphore architecture (CLAUDE.md §3). Constraints if chosen: the handler is registered via `tk_def_int(TA_HLNG)` + `EnableInt` at level 1..15 exactly like the four I2C IRQs (app_i2c.c:36-39, 219-237), does **nothing but** `tk_sig_sem` — any I2C from the handler is a red-zone violation, kernel-legal level, otherwise identical to the prior design — and the ToF read then rides the IMU's clock, which slightly complicates the VL53L1X's own intermeasurement cadence bookkeeping. Concrete design below (§4.1–§4.4; restored 2026-08-26 from the 2026-07-19 session that closed audit M-3, previously recorded only as the prose decision above).
+
+#### 4.1 Semaphore object
+
+| Object | Type | Init | Max | Producer | Consumer |
+|---|---|---|---|---|---|
+| `imu_drdy_sem` | `tk_cre_sem` | isemcnt = 0 | maxsem = 2 | EXTI ISR (PE9, task-independent portion) | Priority 3 Sensor Acquisition task |
+
+**maxsem = 2 rationale [decision, reversible]:** MPU6050 data registers overwrite in place (§2.2), so a pile-up beyond ~2 pending wakes carries no additional data — P3 would only re-read the same latest sample. A small cap bounds the drain loop after any P3 stall; overflow (`E_QOVR`) is expected under overload and is **silently discarded** in the ISR (optionally counted under `#ifdef DEBUG_TIMING`). Losing the *count* above 2 is harmless; losing the *wake* entirely (the `tk_wup_tsk`-without-queuing hazard M-3 guarded against) is not, and cannot happen here.
+
+#### 4.2 ISR (task-independent portion)
+
+```c
+/* EXTI callback for IMU_INT — PE9 (ARD_D3), rising edge.
+   TASK-INDEPENDENT PORTION (interrupt context). NO I2C. NO printf.
+   Producer: this ISR. Consumer: Priority 3 sensor task via imu_drdy_sem.
+   Registered via tk_def_int(TA_HLNG) + EnableInt, kernel-legal level 1..15,
+   exactly like the four I2C IRQs (app_i2c.c:36-39, 219-237). */
+void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin)
+{
+    if (GPIO_Pin == IMU_INT_PIN) {
+        (void)tk_sig_sem(imu_drdy_sem, 1);
+        /* E_QOVR possible at maxsem=2 under P3 overload — intentionally ignored;
+           data regs overwrite, extra wakes add nothing. See §4.1. */
+    }
+    /* VL53L1X GPIO1 (PD0) branch unchanged — already tk_sig_sem, see
+       vl53l1x_port_design.md §6.1. */
+}
+```
+
+#### 4.3 Consumer side (sensor_task, TK_PRI 3)
+
+```c
+/* ONLY IN PRIORITY 3 SENSOR TASK.
+   Timeout retained: expiry = data-ready starvation → staleness path
+   (12-feature fallback), same semantics Option A gave to "INT low". */
+ER er = tk_wai_sem(imu_drdy_sem, 1, IMU_DRDY_TMO);   /* TMO ~ 2x sample period,
+                                                        e.g. 40 ms @ 50 Hz */
+if (er == E_TMOUT) {
+    /* mark IMU frame stale — transport per M-4 constraint (§7): validity
+       field INSIDE the semaphore-protected P3->P2 frame buffer, never a
+       bare cross-task flag. */
+} else if (er == E_OK) {
+    /* i2c_rd burst of accel/gyro regs via DMA — unchanged from §2.3 */
+}
+```
+
+#### 4.4 Init-ordering rule
+
+`tk_cre_sem(imu_drdy_sem)` **must complete before** the EXTI line is enabled in NVIC (enable interrupt last in init). A fired EXTI signalling a nonexistent semaphore ID is an `E_ID` in interrupt context — a silent lost wake at best. Same ordering the VL53L1X doc imposes; stated explicitly here too.
+
 - Recommendation: A for first light and the soak; migrate to B only if the logic-analyzer timing campaign (H3-class evidence) shows the poll beat-frequency actually degrading the feature vector. The decision is reversible in one function.
 
 ---

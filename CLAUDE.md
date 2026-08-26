@@ -1,7 +1,7 @@
 # CLAUDE.md — Haptic-Sense (TRON Forum Contest 2026)
 
 AI-driven predictive spatial-awareness wearable for visually impaired users.
-Hard deadline: **September 25, 2026**. Benchtop prototype is the deliverable — NOT a wearable enclosure.
+Hard deadline: **September 30, 2026** (TRON Forum Contest 2026 submission); internal target **September 18, 2026** for hardware freeze/dispatch. Benchtop prototype is the deliverable — NOT a wearable enclosure.
 Developer: solo BTech student, **zero prior experience** in RTOS, ML training, FSBL/TrustZone boot, NPU deployment. Explain new µT-Kernel concepts with a FreeRTOS/real-world analogy first, then the exact API, then where the same pattern appears in the reference repo.
 
 **PHASE STATUS (2026-07-06):** Phase 3 COMPLETE (commit `7a87671`, hardware-verified: heartbeat ~503 ms, camera strip confirmed, binary 682 KB → 63 KB). **Phase 4 FULLY COMPLETE** — (a) correctness gate: four-task architecture (hazard=1 / inference=2 / sensor=3 / heartbeat=10, commit `04994a5`), ~32 min soak, ~91,000 frames in `frames==inf` lockstep, `canary_err=0` (zero torn reads), `q=0`/`qovr=0`, ~47.6 Hz (`docs/evidence/phase4/phase4_soak.log`); (b) preemption campaign (RZ3) PASSED: worst case **3.375 µs** over 2,229 events under chatter load, baseline statistically identical (see §8 RZ3 for full numbers; evidence in `docs/evidence/phase4/`). **Phase 5 IN PROGRESS** (Option A decided 2026-07-06): `DEVCNF_USE_HAL_IIC` stays `0` PERMANENTLY — app owns HAL I2C directly (see §3 "I2C driver decision"); next: own L0/L1 driver.
@@ -64,10 +64,10 @@ Idle reality check (verified 2026-07-05): the STM32 port's `low_pow()` is an EMP
 **ABSOLUTE RULES:**
 - Any `HAL_I2C_Master_Transmit()` / `HAL_I2C_Master_Receive()` (blocking) = red-zone violation. Only `_DMA()` (preferred) or `_IT()` variants.
 - Any I2C call outside the Priority 3 task = red-zone violation. Comment every I2C function: `// ONLY CALL FROM PRIORITY 3 SENSOR TASK`.
-- µT-Kernel API only. NEVER FreeRTOS (`xTaskCreate`, `vTaskDelay`, `xSemaphoreGive` are all wrong here). Use `tk_cre_tsk`, `tk_sta_tsk`, `tk_slp_tsk`, `tk_wup_tsk`, `tk_cre_sem`, `tk_wai_sem`, `tk_sig_sem`, `tk_loc_mtx`/`tk_unl_mtx`, `tk_get_otm`, `tm_printf`.
+- µT-Kernel API only. NEVER FreeRTOS (`xTaskCreate`, `vTaskDelay`, `xSemaphoreGive` are all wrong here). Use `tk_cre_tsk`, `tk_sta_tsk`, `tk_slp_tsk`, `tk_wup_tsk` (reserved — not used in this project; see rule below), `tk_cre_sem`, `tk_wai_sem`, `tk_sig_sem`, `tk_loc_mtx`/`tk_unl_mtx`, `tk_get_otm`, `tm_printf`.
 - Before the first `tk_cre_tsk()`: verify priorities 1–3 are free in `Appli/mtk3_bsp2/config/config.h:27` (`CNF_MAX_TSKPRI 32`) and document the finding in a comment block.
 - When writing any RTOS code, always state which task it runs in and its TK_PRI. For semaphore code, always name producer and consumer.
-- All sensor data-ready ISR→P3 wakes use `tk_sig_sem` (count-carrying), never `tk_wup_tsk` — decided 2026-07-11, audit M-3.
+- All sensor data-ready ISR→P3 wakes use `tk_sig_sem` (count-carrying), never `tk_wup_tsk` — decided 2026-07-11, audit M-3. Producer/consumer must be named at every signal/wait site.
 
 ### Race-condition pattern (implement BEFORE any task body — paired semaphores)
 ```c
