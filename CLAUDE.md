@@ -238,7 +238,7 @@ Fallback BSP: official tron-forum/mtk3_bsp2 **v1.00.04 (May 2026) officially sup
 - H-D8: I2C1 SCL ≤ 400 kHz with DRV2605L on shared bus — **CLOSED 2026-08-29.** SLOS854D §6.7 Switching Characteristics: `f(SCL)` max **400 kHz** with no wait states. `I2C_BUS_HZ 400000` (`app_i2c.h:15`) is legal; measured working at pclk1 = 200 MHz.
 - H-D6 addendum: SLOS854D §6.3 gives `ZL` min **8 Ω at VDD = 5.2 V**, footnoted "ensured by design, not production tested" — quote the condition, not a bare 8 Ω. Direct measurement (V-W-6) still owed before any motor is connected.
 - **H-D9 (new, 2026-08-29): DRV2605L register access CONFIRMED on hardware.** STATUS 0xE0 / MODE 0x40 / LIBRARY_SEL 0x01 read back over I2C1 DMA from the SmartElex board. **Write direction CLOSED 2026-08-30.** `drv2605l_write_probe()` (`app_i2c.c`) reads 0x02 RTP_INPUT, writes 0x27, reads it back, restores the original and verifies the restore — two independent writes, `wr=0 wrseen=0x27 ok=9 err=0 recov=0` on hardware. `hdma_i2c1_tx` has now moved bytes. The full L1 primitive (`i2c_rd` AND `i2c_wr`, DMA both directions) is proven.
-- **H-D10 (new): EN is still on a 3V3 bench jumper, not PE7.** Handoff §5.4 step 4 — move EN to CN12 pin 1 (D8/PE7) and re-read the registers. Pass on the rail but fail on PE7 ⇒ GPIO config, not the board.
+- **H-D10 CLOSED 2026-08-30. EN is driven by PE7 (D8, CN12 pin 1).** Bench jumper removed. Register access unchanged across the move: `whoami=0x140e0 wr=0 wrseen=0x27 ok=9 err=0 recov=0`. PE7 is init-only (`drv2605l_power_up()`, TK_PRI 3) per R-1; the hazard pattern moved to PE13. **Block 0 COMPLETE.**
 
 ## 9. HOW TO BEHAVE (Claude Code)
 
