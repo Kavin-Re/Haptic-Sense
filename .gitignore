@@ -21,3 +21,12 @@ firmware/STM32Cube_FW_N6/
 
 # Python bytecode (analysis scripts)
 __pycache__/
+
+# scratch bundle from the 9-10 Jul session: duplicate PDFs and a STALE
+# copy of app_i2c.c. Never track it - duplicate source trees are how the
+# firmware/Lib vs Appli/Lib build split happened (plan v2 Block 2.10).
+docs/session_bundle/
+
+# vendor datasheets: kept locally and cited by CLAUDE.md, deliberately NOT
+# tracked - 10 MB of TI/ST PDFs, and CLAUDE.md SS7 forbids license mixing.
+docs/datasheets/

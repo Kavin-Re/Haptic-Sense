@@ -38,6 +38,24 @@
  * no lock is needed; this is NOT the race-prone P1->P3 flag that F-1 removed. */
 static volatile BOOL drv_armed;
 
+/* Declared here, ABOVE the GPIO and TRIG functions, because both now write
+ * to it (pulse_cycles at init, pulses/suppressed at runtime). It used to sit
+ * below them, next to the register driver. */
+static drv2605l_stats_t dstats;
+
+/* TRIG pulse state. Written ONLY by hazard_task (TK_PRI 1), read only there. */
+static UW   drv_last_pulse_ms;
+static BOOL drv_pulse_seen;
+
+/* Pulse width in CPU cycles, derived at init from the ACTUAL CPU clock rather
+ * than hardcoded. The handoff's "dwt_spin_cycles(1200) ~ 2 us" assumed a
+ * 600 MHz core; CPUCLK on this board is 800 MHz (hardware-confirmed
+ * 2026-08-30), where 1200 cycles is 1.5 us. SLOS854D §8.4.5.1: "The pulse
+ * width should be at least 1 us to ensure detection" — 1.5 us would still
+ * pass, but deriving it removes the constant from the failure surface
+ * entirely. cpu_hz / 500000 = 2 us worth of cycles. */
+static UW drv_pulse_cycles = 1600u;	/* 2 us at 800 MHz until init runs */
+
 
 void drv2605l_gpio_init(void)
 {
@@ -60,6 +78,16 @@ void drv2605l_gpio_init(void)
 
 	gpio_init.Pin = DRV_TRIG_PIN;
 	HAL_GPIO_Init(DRV_TRIG_PORT, &gpio_init);
+
+	/* Derive the pulse width from the real CPU clock (see drv_pulse_cycles).
+	 * Runs in main_thread (TK_PRI 15) before any task is started, so it is
+	 * ordered before the first hazard_task call by construction. */
+	{
+		UW cpu_hz = (UW)HAL_RCC_GetCpuClockFreq();
+		if (cpu_hz >= 1000000u)
+			drv_pulse_cycles = cpu_hz / 500000u;	/* 2 us */
+		dstats.pulse_cycles = drv_pulse_cycles;
+	}
 }
 
 /* // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
@@ -69,14 +97,64 @@ ER drv2605l_power_up(void)
 	return tk_dly_tsk(DRV_EN_SETTLE_TICKS);
 }
 
-/* // ONLY CALL FROM PRIORITY 1 HAZARD TASK — GPIO only, no I2C, no printf */
-void drv2605l_trig_set(BOOL on)
+/*
+ * Busy-spin for a cycle count, TK_PRI 1, ~2 us. A kernel delay cannot be used
+ * here: the shortest is one tick (1-2 ms) and it would block the highest
+ * priority task in the system for 1000x the required time.
+ *
+ * THE ITERATION GUARD IS NOT DEFENSIVE PADDING. DWT->CYCCNT is enabled in
+ * app_gpio_init() but the enable CAN be rejected on this target (secure
+ * non-invasive debug under TZEN is owned by the FSBL, not by us) and the
+ * counter then reads a constant. A pure `while (CYCCNT - t0 < n)` on a frozen
+ * counter never terminates, and it would hang TK_PRI 1 — the highest priority
+ * task — which stops the entire system with no error and no output. The guard
+ * turns that into a slightly-wrong pulse width instead.
+ */
+static void drv_spin_cycles(UW cycles)
 {
-	if (!drv_armed)
-		return;		/* not configured yet — see the header */
+	UW t0 = DWT->CYCCNT;
+	UW guard = (cycles << 2) + 1000u;
 
-	HAL_GPIO_WritePin(DRV_TRIG_PORT, DRV_TRIG_PIN,
-			  on ? GPIO_PIN_SET : GPIO_PIN_RESET);
+	while ((UW)(DWT->CYCCNT - t0) < cycles) {	/* UW: wrap-safe */
+		if (--guard == 0u)
+			break;			/* counter stopped — never hang */
+	}
+}
+
+/* // ONLY CALL FROM PRIORITY 1 HAZARD TASK — GPIO only, no I2C, no printf */
+BOOL drv2605l_trig_fire(UW want_interval_ms)
+{
+	SYSTIM now;
+	UW iv;
+
+	if (!drv_armed)
+		return FALSE;		/* not configured yet — see the header */
+
+	iv = want_interval_ms;
+	if (iv < DRV_R3_FLOOR_MS)
+		iv = DRV_R3_FLOOR_MS;
+	if (iv > DRV_TRIG_MAX_MS)
+		iv = DRV_TRIG_MAX_MS;
+
+	/* tk_get_otm is a non-blocking read of the operating-time counter; it
+	 * never waits, so it is legal at TK_PRI 1. UW subtraction is wrap-safe
+	 * (tim.lo wraps at 2^32 ms ~= 49.7 days). */
+	if (tk_get_otm(&now) != E_OK)
+		return FALSE;
+
+	if (drv_pulse_seen && (UW)(now.lo - drv_last_pulse_ms) < iv) {
+		dstats.suppressed++;
+		return FALSE;
+	}
+
+	HAL_GPIO_WritePin(DRV_TRIG_PORT, DRV_TRIG_PIN, GPIO_PIN_SET);
+	drv_spin_cycles(drv_pulse_cycles);
+	HAL_GPIO_WritePin(DRV_TRIG_PORT, DRV_TRIG_PIN, GPIO_PIN_RESET);
+
+	drv_last_pulse_ms = now.lo;
+	drv_pulse_seen = TRUE;
+	dstats.pulses++;
+	return TRUE;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -116,7 +194,6 @@ void drv2605l_trig_set(BOOL on)
 /* One aligned file-static buffer for every transfer (PROJECT_DEFENSE F-6c). */
 static UB drv_buf[32] __attribute__((aligned(32)));
 
-static drv2605l_stats_t dstats;
 
 /* // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
 static ER drv_wr8(UB reg, UB val)

@@ -33,12 +33,37 @@ void drv2605l_gpio_init(void);
  * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
 ER drv2605l_power_up(void);
 
-/* Drive TRIG. TK_PRI 1 (hazard_task) only — GPIO, no I2C, no printf.
- * NO-OP until drv2605l_init() has armed the device: firing a trigger at a
- * part that is still in standby or mid-configuration is meaningless, and once
- * TRIG is physically wired it would fire effects during init.
- * Block 1b replaces this level with the ~2 us edge pulse. */
-void drv2605l_trig_set(BOOL on);
+/*
+ * Fire ONE waveform: a ~2 us rising edge on TRIG, rate-limited.
+ * TK_PRI 1 (hazard_task) only — GPIO + DWT read + tk_get_otm. No I2C, no
+ * printf, no blocking call.
+ *
+ * WHY AN EDGE AND NOT A LEVEL (SLOS854D §8.6.2 Table 5, MODE[2:0] = 1,
+ * verbatim): "A rising edge on the IN/TRIG pin sets the GO Bit. A second
+ * rising edge on the IN/TRIG pin cancels the waveform if the second rising
+ * edge occurs before the GO bit has cleared." The device is armed in EDGE
+ * mode, so the old level API was wrong in two ways at once: a level that
+ * stays high across a multi-frame hazard produces exactly ONE buzz and then
+ * silence, and a level that flaps faster than the effect lasts cancels
+ * every playback after the first. Both fail silently.
+ *
+ * want_interval_ms is the caller's urgency request; it is CLAMPED to
+ * [DRV_R3_FLOOR_MS, DRV_TRIG_MAX_MS] and enforced here rather than by the
+ * caller, because a violated floor inverts the product thesis — more urgency
+ * yielding a WEAKER buzz — with no error anywhere.
+ *
+ * Returns TRUE if an edge was actually emitted, FALSE if the call was
+ * suppressed by the rate limit or the device is not armed.
+ */
+BOOL drv2605l_trig_fire(UW want_interval_ms);
+
+/* R-3 rate limit. INTERIM VALUE until HAP-T9 (T4) scopes the real effect-1
+ * duration; the rule is measured_duration x 1.2. Library B predicts 45-75 ms
+ * (SLOS854D Table 1: rise 40-60 ms, brake 5-15 ms), so 75 x 1.2 = 90 ms is
+ * the predicted floor and 125 ms is deliberately conservative.
+ * DO NOT LOWER THIS WITHOUT THE SCOPE CAPTURE. */
+#define DRV_R3_FLOOR_MS		125u
+#define DRV_TRIG_MAX_MS		1000u
 
 /* Full register init: configure for open-loop ERM, select the waveform, arm
  * for external edge trigger, and verify the arming by readback.
@@ -58,6 +83,9 @@ typedef struct {
 	UW	odc_rb;		/* 0x17 readback, expect 0x8B (reset 0x8C)  */
 	UW	status_rb;	/* 0x00 raw byte; bit1 OVER_TEMP, bit0 OC   */
 	UW	armed;		/* 1 once the readback check passed         */
+	UW	pulses;		/* TRIG edges actually emitted              */
+	UW	suppressed;	/* fire() calls refused by the R-3 limit    */
+	UW	pulse_cycles;	/* CPU cycles per ~2 us pulse, from CPUCLK  */
 } drv2605l_stats_t;
 
 const drv2605l_stats_t *drv2605l_get_stats(void);

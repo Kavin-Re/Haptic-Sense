@@ -12,7 +12,8 @@ Developer: solo BTech student, **zero prior experience** in RTOS, ML training, F
 
 ## 1. TARGET & TOOLCHAIN (verify before first build)
 
-- Board: **STM32N6570-DK** (MB1939) — STM32N657X0HXQ, Cortex-M55 @ 600 MHz + Ethos-U55/Neural-ART NPU
+- Board: **STM32N6570-DK** (MB1939) — STM32N657X0HXQ, **Cortex-M55 @ 800 MHz** + Ethos-U55/Neural-ART NPU
+  - **800 MHz, not 600 — corrected 2026-08-30, hardware-confirmed (G-8 CLOSED).** `main.c:206-212` PLL1 = HSI 64 MHz / M 2 × N 25 = 800 MHz; `main.c:249-255` CPUCLK = IC1 ÷ 1 = **800 MHz**, sysb_ck = IC2 ÷ 2 = **400 MHz**, HCLK/PCLK1 = 200 MHz. The board prints `cpu=800000000 sysb=400000000 pclk1=200000000` and an on-target CYCCNT measurement gives **800000 cycles/ms** over five heartbeats including a 32-bit wrap. The long-standing `sysclk=400000000` reading was always correct — it is IC2, a different clock tree from the CPU, read by `HAL_RCC_GetSysClockFreq()` (`stm32n6xx_hal_rcc.c:1440`) versus `HAL_RCC_GetCpuClockFreq()` (`:1351`). Evidence: `docs/evidence/phase5/PHASE5_T1_CYCCNT_CLOCK_20260830.md`
 - App executes from **XSPI RAM** (no internal flash execution) — linker script `STM32N657X0HXQ_LRUN.ld`
 - RTOS: **µT-Kernel 3.0** (T-Kernel family). Lower integer = higher priority.
 - Host: Linux Mint. IDE: STM32CubeIDE **≥ 1.19.0**. Programmer: STM32CubeProgrammer **≥ 2.20.0** (older = wrong Cortex-M55 GCC flags — RED ZONE)
@@ -158,7 +159,7 @@ reset value** (DRV2605L STATUS = 0xE0, MODE = 0x40, LIBRARY_SEL = 0x01) rather t
 
 ### Preemption instrumentation (from Day 1 of task code, guard with `#ifdef DEBUG_TIMING`)
 - GPIO method for logic analyzer (contest evidence): PH5 (D0) set at hazard-signal, PD6 (D1) set at haptic-EN. Δt(D0→D1) on PulseView = preemption latency. LA: 24 MHz sigrok clone (verify `sigrok-cli --scan`).
-- DWT method in firmware: `DWT->CYCCNT`; cycles / 600000 = ms at 600 MHz.
+- DWT method in firmware: `DWT->CYCCNT`; **cycles / 800000 = ms at 800 MHz** (CPUCLK — CYCCNT counts the processor clock, never sysb_ck). **Corrected 2026-08-30 from /600000, which was wrong by 800/600 = 1.333×; every DWT-derived figure predating that date reads 1.333× too large.** DWT is enabled UNCONDITIONALLY (`app_tasks.c` `app_gpio_init()`, T1) — it was previously inside `#ifdef DEBUG_TIMING`, which this build does not define, so the counter was not running outside the Phase 4 campaign. Liveness is checked at enable (`DWT_CTRL_NOCYCCNT_Msk`, plus two spaced reads) and printed as `[DWT] ok=`; **a spin-delay built on CYCCNT must carry an iteration bound as well as a cycle bound, or a stopped counter hangs whatever task it runs in.**
 - Terminology: never write "zero-latency" anywhere. Use "deterministic sub-millisecond latency (< 1 ms, hardware-verified)".
 
 ### I2C driver decision (Phase 5, Option A — decided 2026-07-06)
@@ -217,7 +218,7 @@ Fallback BSP: official tron-forum/mtk3_bsp2 **v1.00.04 (May 2026) officially sup
 |---|---|---|
 | 1 | FSBL signing pipeline | RESOLVED 2026-07-05: full chain verified on hardware — FSBL → signed app @ 0x70100000, Flash Boot, Phase 3 heartbeat running (`-align` present, correct tool path) |
 | 2 | Toolchain versions | VERIFIED: STM32CubeIDE 2.2.0, STM32CubeProgrammer 2.23.0, both N6-capable, build succeeds |
-| 3 | <1 ms preemption measurement | RESOLVED 2026-07-06: worst-case preemption latency **3.375 µs** (2,025 cycles) over 2,229 events under CPU load; baseline identical at 3.375 µs over 1,776 events; σ ≈ 41–45 ns (below LA resolution — deterministic); missed=0 both runs; DWT cross-check consistent (~4 µs integer-truncated firmware reading). Locked claim wording: "deterministic sub-millisecond latency (< 1 ms, hardware-verified), worst case 3.375 µs over 2,229 events under CPU load; baseline identical." Evidence: `docs/evidence/phase4/` (7 `.sr` captures, `analyze_timing.py`, `analysis_runA_chatter.txt`, `analysis_runB_baseline.txt`, `sigrok_scan.txt`) |
+| 3 | <1 ms preemption measurement | RESOLVED 2026-07-06: worst-case preemption latency **3.375 µs** (**2,700 cycles at 800 MHz** — was recorded as 2,025 using the wrong 600 MHz constant; the 3.375 µs itself is a logic-analyzer figure and is UNAFFECTED) over 2,229 events under CPU load; baseline identical at 3.375 µs over 1,776 events; σ ≈ 41–45 ns (below LA resolution — deterministic); missed=0 both runs; DWT cross-check consistent (~4 µs integer-truncated firmware reading). Locked claim wording: "deterministic sub-millisecond latency (< 1 ms, hardware-verified), worst case 3.375 µs over 2,229 events under CPU load; baseline identical." Evidence: `docs/evidence/phase4/` (7 `.sr` captures, `analyze_timing.py`, `analysis_runA_chatter.txt`, `analysis_runB_baseline.txt`, `sigrok_scan.txt`) |
 | 4 | Inference-buffer race | RESOLVED 2026-07-05: paired-semaphore handshake (seq/seq_check canary torture test) proven correct on hardware — ~91k events, zero torn reads over ~32 min soak (`docs/evidence/phase4/phase4_soak.log`, commit `04994a5`) |
 | 5 | ML scope creep | Edge Impulse only; feature vector locked (§6) |
 | 6 | NPU silent CPU fallback | FC/ReLU/Sigmoid only |

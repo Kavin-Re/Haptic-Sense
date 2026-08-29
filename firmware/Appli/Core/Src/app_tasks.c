@@ -165,6 +165,39 @@ static volatile UW dwt_dt_sum;			/* reset each HB print  */
 static volatile UW dwt_dt_cnt;			/* reset each HB print  */
 #endif
 
+/*
+ * Urgency -> pulse INTERVAL, in ms. TK_PRI 1, pure integer arithmetic.
+ *
+ * The effect CONTENT never changes at runtime (one armed waveform, effect 1);
+ * urgency is encoded purely as how often it fires. Faster closing => shorter
+ * interval => denser buzz.
+ *
+ * Linear between the hazard threshold and a fast approach:
+ *     v =  20 cm/s (the hazard threshold)  -> DRV_TRIG_MAX_MS  (1000 ms)
+ *     v = 100 cm/s                         -> DRV_R3_FLOOR_MS  ( 125 ms)
+ *   slope = (1000 - 125) / (100 - 20) = 875 / 80 ~= 11 ms per cm/s
+ * drv2605l_trig_fire() clamps the result to [floor, max] regardless, so this
+ * function cannot violate R-3 even if the constants are later edited.
+ *
+ * NOTE FOR THE BENCH: the synthetic generator produces a CONSTANT closing
+ * velocity of 50 cm/s (SYN_STEP_MM 10 per 20 ms frame), so this mapping
+ * returns a constant ~670 ms until real ToF frames arrive in Block 4.
+ * Graded urgency is not demonstrable on synthetic data — do not read a
+ * uniform buzz rate as a fault.
+ */
+static UW hazard_urgency_interval_ms(W v_cm_s)
+{
+	W iv;
+
+	if (v_cm_s <= (W)HAZARD_VCLOSE_CM_S)
+		return DRV_TRIG_MAX_MS;
+
+	iv = (W)DRV_TRIG_MAX_MS - ((v_cm_s - (W)HAZARD_VCLOSE_CM_S) * 11);
+	if (iv < (W)DRV_R3_FLOOR_MS)
+		iv = (W)DRV_R3_FLOOR_MS;
+	return (UW)iv;
+}
+
 /* ------------------------------------------------------------------------ */
 /* hazard_task — TK_PRI 1                                                    */
 /* GPIO only. NO I2C, NO printf, NO blocking I/O — ever (CLAUDE.md §3).      */
@@ -196,22 +229,17 @@ static void hazard_task_fct(INT stacd, void *exinf)
 		if (r.seq != r.seq_check)
 			stat_canary_errs++;
 
-		/* DRV_TRIG (PE13/D6, CN11 pin 7): pattern = hazard level.
-		 * MOVED OFF PE7 2026-08-30 — PE7 is now DRV_EN and a real
-		 * DRV2605L is on it. EN low is device shutdown (SLOS854D
-		 * §8.4.1.3: the part still ACKs its address but permits no
-		 * register access), so driving EN with the hazard level would
-		 * kill the Priority-3 register reads on every non-hazard frame
-		 * and look exactly like a wiring fault.
+		/* DRV_TRIG (PE13/D6, CN11 pin 7): ~2 us EDGE per fire, rate
+		 * limited by R-3 inside the driver (T2, 2026-08-30 — replaces
+		 * the Phase 4 hazard LEVEL placeholder).
 		 * Priority-1 task touches GPIO ONLY (CLAUDE.md §2); all
 		 * DRV2605L I2C configuration happens at init from TK_PRI 3.
-		 * Block 1 replaces this level with the ~2 us edge pulse the
-		 * DRV2605L actually wants — a level held high while GO is high
-		 * CANCELS playback (HAP-T3), so this is a placeholder, not the
-		 * design. TRIG is not wired to the breakout yet. */
-		drv2605l_trig_set(r.hazard ? TRUE : FALSE);
-		if (r.hazard)
+		 * TRIG is not wired to the breakout yet — T3 step 3. */
+		if (r.hazard) {
+			(void)drv2605l_trig_fire(
+				hazard_urgency_interval_ms(r.v_close_cm_s));
 			stat_hazard_events++;
+		}
 
 		/* producer: hazard_task(P) -> result_free_sem -> inference_task(C) */
 		tk_sig_sem(result_free_sem, 1);
@@ -410,6 +438,12 @@ static void heartbeat_task_fct(INT stacd, void *exinf)
 				  (INT)d->init_result, d->device_id,
 				  d->mode_rb, d->lib_rb, d->seq_rb,
 				  d->odc_rb, d->status_rb, d->armed);
+			/* sts= is a SNAPSHOT taken once in drv2605l_init(), not a
+			 * live read — OC_DETECT/OVER_TEMP clear on read and this
+			 * value never updates. A runtime poll is still owed
+			 * before the motor is connected (T3). */
+			tm_printf((UB *)"[TRG] pulses=%u suppressed=%u cyc=%u\n",
+				  d->pulses, d->suppressed, d->pulse_cycles);
 		}
 
 		{	/*
