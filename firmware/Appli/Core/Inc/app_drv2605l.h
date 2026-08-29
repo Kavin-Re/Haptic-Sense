@@ -90,6 +90,35 @@ ER drv2605l_init(void);
  */
 void drv2605l_poll(void);
 
+/*
+ * HAP-T9 / H-D3 — measure the real effect-1 playback duration, in firmware.
+ *
+ * Call once per sensor frame. It is a NO-OP except in the short window after
+ * one of the first few TRIG pulses, and it stops for good after
+ * DRV_EFF_SAMPLES_MAX attempts -- it must not keep costing I2C for the life of
+ * the demo, and it must never spin the motor on its own.
+ *
+ * METHOD. Register 0x0C bit 0 is GO. SLOS854D §8.6.2 Table 5, MODE[2:0] = 1:
+ * "A rising edge on the IN/TRIG pin sets the GO Bit", and §8.4.3: "The GO bit
+ * remains high until the playback of the haptic waveform sequence is
+ * complete." So drv2605l_trig_fire() stamps DWT->CYCCNT at the rising edge,
+ * and this function polls 0x0C until GO clears and subtracts. CPUCLK is
+ * hardware-confirmed at 800 MHz, so cycles convert to microseconds exactly.
+ *
+ * IT MEASURES NO EXTRA BUZZES. It piggybacks on hazard pulses that were going
+ * to fire anyway, so nothing new is heard and nothing is added to a cold-boot
+ * demo -- the objection that removed the MODE=6 diagnostic from init.
+ *
+ * WHAT IT CANNOT DO, stated so the number is not over-read: GO spans the WHOLE
+ * sequence, rise plus brake. It cannot separate them the way a differential
+ * scope capture across OUT+/OUT- through the SLOS854D Fig. 11 filter can. It
+ * bounds them: a total under 75 ms means rise cannot exceed 80 ms, which is
+ * enough to settle H-D4 (Library B vs C/D). Take the scope capture too when a
+ * two-channel scope is available.
+ * // ONLY CALL FROM PRIORITY 3 SENSOR TASK
+ */
+void drv2605l_measure_service(void);
+
 /* Bring-up observability. Single writer (sensor task, TK_PRI 3); the heartbeat
  * task reads it. 32-bit reads are atomic on ARMv8-M. */
 typedef struct {
@@ -109,6 +138,13 @@ typedef struct {
 	UW	polls;		/* drv2605l_poll() calls; ok = 24 + 2*polls */
 	UW	faults_seen;	/* STICKY OR of OVER_TEMP|OC_DETECT         */
 	UW	cfg_lost;	/* polls where MODE was no longer 0x01      */
+	/* HAP-T9 effect-duration measurement, microseconds */
+	UW	eff_n;		/* valid samples                            */
+	UW	eff_last_us;
+	UW	eff_min_us;
+	UW	eff_max_us;
+	UW	eff_late;	/* GO already clear at first poll: DISCARDED */
+	UW	eff_stuck;	/* GO never cleared, or a read failed        */
 } drv2605l_stats_t;
 
 const drv2605l_stats_t *drv2605l_get_stats(void);

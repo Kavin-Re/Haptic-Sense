@@ -56,6 +56,21 @@ static BOOL drv_pulse_seen;
  * entirely. cpu_hz / 500000 = 2 us worth of cycles. */
 static UW drv_pulse_cycles = 1600u;	/* 2 us at 800 MHz until init runs */
 
+/* CPU cycles per microsecond, derived at init alongside drv_pulse_cycles. */
+static UW drv_cyc_per_us = 800u;	/* 800 MHz until init runs */
+
+#define DRV_REG_GO		0x0Cu	/* bit 0 = GO (Table 3, reset 0x00) */
+#define DRV_GO_BIT		0x01u
+#define DRV_EFF_SAMPLES_MAX	5u
+#define DRV_EFF_POLL_MAX	2000u	/* ~150 us per read => ~300 ms ceiling */
+
+/* HAP-T9 handshake. drv_meas_t0 is written by hazard_task (TK_PRI 1) at the
+ * TRIG rising edge and read by sensor_task (TK_PRI 3); drv_meas_pending is the
+ * one-way flag between them. Single writer each way, 32-bit aligned, so no lock
+ * is needed -- the same argument as drv_armed. */
+static volatile UW   drv_meas_t0;
+static volatile BOOL drv_meas_pending;
+
 
 void drv2605l_gpio_init(void)
 {
@@ -84,9 +99,12 @@ void drv2605l_gpio_init(void)
 	 * ordered before the first hazard_task call by construction. */
 	{
 		UW cpu_hz = (UW)HAL_RCC_GetCpuClockFreq();
-		if (cpu_hz >= 1000000u)
+		if (cpu_hz >= 1000000u) {
 			drv_pulse_cycles = cpu_hz / 500000u;	/* 2 us */
+			drv_cyc_per_us   = cpu_hz / 1000000u;
+		}
 		dstats.pulse_cycles = drv_pulse_cycles;
+		dstats.eff_min_us   = 0xFFFFFFFFu;	/* so the first sample wins */
 	}
 }
 
@@ -148,6 +166,17 @@ BOOL drv2605l_trig_fire(UW want_interval_ms)
 	}
 
 	HAL_GPIO_WritePin(DRV_TRIG_PORT, DRV_TRIG_PIN, GPIO_PIN_SET);
+
+	/* HAP-T9: stamp the RISING EDGE -- that is the instant the DRV2605L
+	 * sets GO (Table 5, MODE 1), so it is the only correct t0. Taken
+	 * immediately after the pin goes high and before the spin, so the 2 us
+	 * pulse width is not counted into the effect duration. */
+	if (!drv_meas_pending &&
+	    (dstats.eff_n + dstats.eff_late + dstats.eff_stuck) < DRV_EFF_SAMPLES_MAX) {
+		drv_meas_t0 = DWT->CYCCNT;
+		drv_meas_pending = TRUE;
+	}
+
 	drv_spin_cycles(drv_pulse_cycles);
 	HAL_GPIO_WritePin(DRV_TRIG_PORT, DRV_TRIG_PIN, GPIO_PIN_RESET);
 
@@ -436,6 +465,58 @@ done:
  * which this design does not run at boot (Decision 4), so latching it would
  * manufacture a fault out of an undefined value. */
 #define DRV_STATUS_FAULT_MASK	0x03u
+
+/* // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
+void drv2605l_measure_service(void)
+{
+	UB   v;
+	UINT i;
+	UW   t1, us;
+
+	if (!drv_meas_pending)
+		return;
+	drv_meas_pending = FALSE;	/* one attempt per pulse, always */
+
+	/* Tight poll. This deliberately overruns the 20 ms frame budget for
+	 * the ~45-75 ms the effect lasts, so up to DRV_EFF_SAMPLES_MAX frames
+	 * run late during the measurement window. frames and inf both come
+	 * from this same loop so their lockstep is preserved and the RZ4
+	 * canary cannot trip; it shows only as a brief dip in frame rate. */
+	for (i = 0; i < DRV_EFF_POLL_MAX; i++) {
+		if (drv_rd8(DRV_REG_GO, &v) != E_OK) {
+			dstats.eff_stuck++;
+			return;
+		}
+		if ((v & DRV_GO_BIT) == 0u)
+			break;
+	}
+	t1 = DWT->CYCCNT;
+
+	if (i >= DRV_EFF_POLL_MAX) {
+		dstats.eff_stuck++;	/* GO never cleared */
+		return;
+	}
+	if (i == 0u) {
+		/* GO was ALREADY clear on the very first read, so playback had
+		 * finished before this task got to look and the elapsed time is
+		 * an upper bound, not a measurement. DISCARD IT rather than
+		 * record a plausible-looking number -- an effect shorter than
+		 * the ~20 ms sensor period would itself be the finding. */
+		dstats.eff_late++;
+		return;
+	}
+	if (drv_cyc_per_us == 0u)
+		return;
+
+	us = (UW)(t1 - drv_meas_t0) / drv_cyc_per_us;	/* UW: wrap-safe */
+
+	dstats.eff_last_us = us;
+	if (us < dstats.eff_min_us)
+		dstats.eff_min_us = us;
+	if (us > dstats.eff_max_us)
+		dstats.eff_max_us = us;
+	dstats.eff_n++;
+}
 
 /* // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
 void drv2605l_poll(void)

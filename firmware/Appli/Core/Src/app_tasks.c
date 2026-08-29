@@ -398,6 +398,13 @@ static void sensor_task_fct(INT stacd, void *exinf)
 
 		stat_frames++;
 
+		/* HAP-T9 (H-D3): measure real effect-1 duration by timing the
+		 * GO bit. No-op except in the window after one of the first few
+		 * TRIG pulses, and permanently silent after 5 attempts. Rides
+		 * on hazard pulses that fire anyway, so it adds no buzz.
+		 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
+		drv2605l_measure_service();
+
 		/* DRV2605L health + config validity, ~1 Hz. TK_PRI 3 owns all
 		 * I2C (CLAUDE.md §3), so this is the only context it may run
 		 * in. Two 1-byte register reads via DMA, ~250 us total once per
@@ -473,6 +480,15 @@ static void heartbeat_task_fct(INT stacd, void *exinf)
 			 * any time after the motor is connected is a STOP. */
 			tm_printf((UB *)"[HLT] polls=%u faults=0x%x cfglost=%u\n",
 				  d->polls, d->faults_seen, d->cfg_lost);
+			/* HAP-T9: effect-1 playback duration, microseconds.
+			 * Predicted 45000-75000 (SLOS854D Table 1, Library B:
+			 * rise 40-60 ms + brake 5-15 ms). R-3 floor = max x 1.2.
+			 * late/stuck are DISCARDED samples, not measurements. */
+			if (d->eff_n > 0u || d->eff_late > 0u || d->eff_stuck > 0u)
+				tm_printf((UB *)"[EFF] n=%u last=%u min=%u max=%u late=%u stuck=%u\n",
+					  d->eff_n, d->eff_last_us,
+					  d->eff_min_us, d->eff_max_us,
+					  d->eff_late, d->eff_stuck);
 		}
 
 		{	/*
