@@ -168,32 +168,46 @@ static volatile UW dwt_dt_cnt;			/* reset each HB print  */
 
 /*
  * Urgency -> pulse INTERVAL, in ms. TK_PRI 1, pure integer arithmetic.
+ * RETUNED 2026-08-30 once HAP-T9 measured the effect at 58.7 ms.
  *
  * The effect CONTENT never changes at runtime (one armed waveform, effect 1);
- * urgency is encoded purely as how often it fires. Faster closing => shorter
- * interval => denser buzz.
+ * urgency is encoded purely as how often it fires.
  *
- * Linear between the hazard threshold and a fast approach:
- *     v =  20 cm/s (the hazard threshold)  -> DRV_TRIG_MAX_MS  (1000 ms)
- *     v = 100 cm/s                         -> DRV_R3_FLOOR_MS  ( 125 ms)
- *   slope = (1000 - 125) / (100 - 20) = 875 / 80 ~= 11 ms per cm/s
- * drv2605l_trig_fire() clamps the result to [floor, max] regardless, so this
- * function cannot violate R-3 even if the constants are later edited.
+ *     v =  20 cm/s (the hazard threshold) -> HAZ_URG_BASE_MS   400 ms
+ *     v =  50 cm/s                        ->                   280 ms
+ *     v =  80 cm/s                        ->                   160 ms
+ *     v = 100 cm/s and above              -> DRV_R3_FLOOR_MS    75 ms
  *
- * NOTE FOR THE BENCH: the synthetic generator produces a CONSTANT closing
- * velocity of 50 cm/s (SYN_STEP_MM 10 per 20 ms frame), so this mapping
- * returns a constant ~670 ms until real ToF frames arrive in Block 4.
- * Graded urgency is not demonstrable on synthetic data — do not read a
- * uniform buzz rate as a fault.
+ * WHY THE OLD CURVE WAS WRONG. It anchored the slow end at 1000 ms, so
+ * 50 cm/s — a brisk approach, and the only velocity the synthetic generator
+ * produces — mapped to 670 ms and yielded TWO pulses across an 828 ms hazard
+ * burst (measured: pulses 4->6 per burst). Two buzzes do not read as an
+ * alert. Anything that reaches the hazard rule at all (inside 80 cm AND
+ * closing faster than 20 cm/s) is already urgent, so the slow anchor belongs
+ * near 400 ms, not 1000. At 280 ms the same burst gives 3-4 pulses, and a
+ * real ~1.4 s approach gives 5-6.
+ *
+ * drv2605l_trig_fire() clamps to [DRV_R3_FLOOR_MS, DRV_TRIG_MAX_MS]
+ * regardless, so this function cannot violate R-3 even if these constants are
+ * later edited. That is the point of enforcing the floor in the driver.
+ *
+ * STILL TRUE ON THE BENCH: the synthetic generator emits a CONSTANT 50 cm/s
+ * (SYN_STEP_MM 10 per 20 ms frame), so this returns a constant 280 ms until
+ * real ToF frames arrive in Block 4. Graded urgency is NOT demonstrable on
+ * synthetic data — a uniform buzz rate is not a fault.
  */
+#define HAZ_URG_BASE_MS		400	/* interval at the hazard threshold */
+#define HAZ_URG_SLOPE		4	/* ms shorter per extra cm/s        */
+
 static UW hazard_urgency_interval_ms(W v_cm_s)
 {
 	W iv;
 
 	if (v_cm_s <= (W)HAZARD_VCLOSE_CM_S)
-		return DRV_TRIG_MAX_MS;
+		return (UW)HAZ_URG_BASE_MS;
 
-	iv = (W)DRV_TRIG_MAX_MS - ((v_cm_s - (W)HAZARD_VCLOSE_CM_S) * 11);
+	iv = (W)HAZ_URG_BASE_MS -
+	     ((v_cm_s - (W)HAZARD_VCLOSE_CM_S) * (W)HAZ_URG_SLOPE);
 	if (iv < (W)DRV_R3_FLOOR_MS)
 		iv = (W)DRV_R3_FLOOR_MS;
 	return (UW)iv;

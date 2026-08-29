@@ -57,12 +57,32 @@ ER drv2605l_power_up(void);
  */
 BOOL drv2605l_trig_fire(UW want_interval_ms);
 
-/* R-3 rate limit. INTERIM VALUE until HAP-T9 (T4) scopes the real effect-1
- * duration; the rule is measured_duration x 1.2. Library B predicts 45-75 ms
- * (SLOS854D Table 1: rise 40-60 ms, brake 5-15 ms), so 75 x 1.2 = 90 ms is
- * the predicted floor and 125 ms is deliberately conservative.
- * DO NOT LOWER THIS WITHOUT THE SCOPE CAPTURE. */
-#define DRV_R3_FLOOR_MS		125u
+/*
+ * R-3 rate limit. NO LONGER INTERIM — set from measurement 2026-08-30.
+ *
+ * HAP-T9 (H-D3) measured effect-1 playback at 58605-58708 us over 5 samples,
+ * late=0 stuck=0, by timing the GO bit against DWT at a hardware-confirmed
+ * 800 MHz CPUCLK. Spread 103 us = 0.18%, i.e. a ROM effect replaying
+ * deterministically. Mid-band against the SLOS854D Table 1 Library B
+ * prediction of 45-75 ms (rise 40-60, brake 5-15).
+ *
+ * Rule is measured_max x 1.2 = 58.708 x 1.2 = 70.4 ms. 75 ms is adopted:
+ * a round number, and 1.278x the measured max.
+ *
+ * The measurement's END is when TK_PRI 3 observed GO clear, up to one I2C
+ * read (~98 us) after it actually cleared, so 58.708 ms is an UPPER bound on
+ * the true duration — the safe direction for a floor. The START is exact,
+ * stamped from DWT at the TRIG rising edge.
+ *
+ * DO NOT LOWER BELOW 75 ms. Below the effect duration, a second rising edge
+ * lands while GO is still high and CANCELS playback (SLOS854D §8.6.2 Table 5),
+ * so more urgency would produce a WEAKER buzz — a silent inversion of the
+ * product thesis.
+ */
+#define DRV_R3_FLOOR_MS		75u
+
+/* Absolute ceiling the driver will honour. The urgency CURVE is policy and
+ * lives in app_tasks.c; this is only the safety bound. */
 #define DRV_TRIG_MAX_MS		1000u
 
 /* Full register init: configure for open-loop ERM, select the waveform, arm
