@@ -181,6 +181,9 @@ BOOL drv2605l_trig_fire(UW want_interval_ms)
 #define DRV_REG_FEEDBACK	0x1Au	/* reset 0x36 */
 #define DRV_REG_CONTROL3	0x1Du	/* reset 0xA0 */
 
+#define DRV_MODE_DEV_RESET	0x80u	/* MODE bit 7, self-clearing (Table 5) */
+#define DRV_MODE_RESET_VALUE	0x40u	/* MODE after reset: STANDBY=1, MODE=0 */
+#define DRV_RESET_POLL_MAX	10u	/* x 1 kernel tick (1-2 ms) */
 #define DRV_MODE_STANDBY_CLR	0x00u	/* STANDBY=0, MODE=0 internal trigger  */
 #define DRV_MODE_EDGE_TRIG	0x01u	/* STANDBY=0, MODE=1 external EDGE     */
 #define DRV_DEVICE_ID_L		7u	/* §8.6.1 Table 4: 7 = DRV2605L, 3 = non-L */
@@ -296,6 +299,66 @@ ER drv2605l_init(void)
 	dstats.device_id = (UW)(v >> 5);		/* bits 7:5, NOT v & 0x07 */
 	if (dstats.device_id != DRV_DEVICE_ID_L) {
 		err = E_NOEXS;
+		goto done;
+	}
+
+	/*
+	 * DEV_RESET FIRST — added 2026-08-30 after the bench proved the hole.
+	 *
+	 * THE DRV2605L RETAINS ITS CONFIGURATION ACROSS AN MCU RESET. Evidence:
+	 * on the boot after Block 1a first ran, app_i2c_gate_test() -- which
+	 * executes BEFORE this function writes anything -- packed
+	 * whoami=0x0201E0, i.e. MODE 0x01 = 0x01 and LIBRARY 0x03 = 0x02: the
+	 * values THIS DRIVER writes, not the 0x40 / 0x01 reset values it read on
+	 * 2026-08-29 (whoami=0x0140E0). The MCU had been reset many times by the
+	 * flash cycle in between.
+	 *
+	 * That breaks the readback verification below in a way that reports
+	 * success. Without a reset, mode_rb / lib_rb / odc_rb can all read
+	 * correct because a PREVIOUS boot configured the part, while every write
+	 * in this boot silently failed -- init=0, armed=1, and a part that is
+	 * only configured by luck. It is the same shape as RZ9: the check passes
+	 * on state that did not come from the thing being checked.
+	 *
+	 * It also matters for the shipped unit. Per plan v2 §0.3 a judge powers
+	 * the board cold with nothing attached; init must reach one deterministic
+	 * state regardless of what the part was left holding.
+	 *
+	 * SLOS854D §8.6.2 Table 5, DEV_RESET, verbatim: "Setting this bit
+	 * performs the equivalent operation of power cycling the device. Any
+	 * playback operations are immediately interrupted, and all registers are
+	 * reset to the default values. The DEV_RESET bit self-clears after the
+	 * reset operation is complete."
+	 *
+	 * Confirming MODE == 0x40 afterwards is what makes every later readback
+	 * meaningful: the registers are PROVEN to be at their reset values
+	 * immediately before the writes, so reading back a non-reset value
+	 * afterwards can only have come from this boot.
+	 *
+	 * The poll count closes H-D7 (DEV_RESET self-clear time, "instrument on
+	 * first hardware run"). A read may NACK while the part is mid-reset, so
+	 * a failed read is retried rather than treated as fatal.
+	 */
+	err = drv_wr8(DRV_REG_MODE, DRV_MODE_DEV_RESET);
+	if (err != E_OK)
+		goto done;
+
+	v = DRV_SENTINEL;
+	for (i = 0; i < DRV_RESET_POLL_MAX; i++) {
+		(void)tk_dly_tsk(1);
+		dstats.rst_polls++;
+		if (drv_rd8(DRV_REG_MODE, &v) != E_OK)
+			continue;		/* NACK mid-reset is expected */
+		if ((v & DRV_MODE_DEV_RESET) == 0u)
+			break;
+	}
+	dstats.rst_mode = (UW)v;
+	if (i >= DRV_RESET_POLL_MAX) {
+		err = E_TMOUT;		/* DEV_RESET never self-cleared */
+		goto done;
+	}
+	if (v != DRV_MODE_RESET_VALUE) {
+		err = E_OBJ;		/* reset did not restore defaults */
 		goto done;
 	}
 

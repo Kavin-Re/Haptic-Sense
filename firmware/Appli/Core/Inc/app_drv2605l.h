@@ -86,6 +86,8 @@ typedef struct {
 	UW	pulses;		/* TRIG edges actually emitted              */
 	UW	suppressed;	/* fire() calls refused by the R-3 limit    */
 	UW	pulse_cycles;	/* CPU cycles per ~2 us pulse, from CPUCLK  */
+	UW	rst_polls;	/* H-D7: MODE reads until DEV_RESET cleared */
+	UW	rst_mode;	/* MODE after reset, expect 0x40            */
 } drv2605l_stats_t;
 
 const drv2605l_stats_t *drv2605l_get_stats(void);

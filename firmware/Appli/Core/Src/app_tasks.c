@@ -153,6 +153,7 @@ static volatile UW stat_canary_errs;	/* writer: hazard_task    */
 static volatile UW dwt_ok;
 static UW hb_prev_cyc;			/* heartbeat-local, TK_PRI 10 only */
 static UW hb_prev_ms;
+static UW hb_dwt_intervals;		/* completed intervals; <2 = not settled */
 
 #ifdef DEBUG_TIMING
 /* DWT corroboration (Red Zone #3). dwt_t0 written by inference_task at
@@ -442,8 +443,9 @@ static void heartbeat_task_fct(INT stacd, void *exinf)
 			 * live read — OC_DETECT/OVER_TEMP clear on read and this
 			 * value never updates. A runtime poll is still owed
 			 * before the motor is connected (T3). */
-			tm_printf((UB *)"[TRG] pulses=%u suppressed=%u cyc=%u\n",
-				  d->pulses, d->suppressed, d->pulse_cycles);
+			tm_printf((UB *)"[TRG] pulses=%u suppressed=%u cyc=%u rst=%u rstmode=0x%x\n",
+				  d->pulses, d->suppressed, d->pulse_cycles,
+				  d->rst_polls, d->rst_mode);
 		}
 
 		{	/*
@@ -473,6 +475,33 @@ static void heartbeat_task_fct(INT stacd, void *exinf)
 			UW cyc  = DWT->CYCCNT;
 			UW dms  = tim.lo - hb_prev_ms;
 			UW cpms = (dms != 0u) ? ((cyc - hb_prev_cyc) / dms) : 0u;
+
+			/*
+			 * PRINT 0 UNTIL TWO INTERVALS HAVE COMPLETED.
+			 *
+			 * The first reading divides by an uptime that started
+			 * before the DWT was zeroed in app_gpio_init(), and the
+			 * second spans the boot window, where up_ms advanced
+			 * 1148 ms against only 1035 ms of CPU cycles (measured
+			 * 2026-08-30: 602178 then 721524, settling to
+			 * 799999 / 800293 / 799998 thereafter -- 4 ppm).
+			 *
+			 * THAT 113 ms DISCREPANCY IS NOT EXPLAINED. It is
+			 * confined to the boot interval and steady state is
+			 * exact, so it does not affect the result, but it is
+			 * recorded rather than rationalised. Test that would
+			 * settle it: toggle a GPIO on each heartbeat and compare
+			 * kernel up_ms against the logic analyzer across the
+			 * first three seconds.
+			 *
+			 * Suppressed because these logs become Block 9 archive
+			 * material and a stray "602178" is a number somebody
+			 * could later quote as a measurement. 0 = not settled.
+			 */
+			if (hb_dwt_intervals < 2u) {
+				hb_dwt_intervals++;
+				cpms = 0u;
+			}
 
 			tm_printf((UB *)"[DWT] ok=%u cyc=%u cyc_per_ms=%u\n",
 				  dwt_ok, cyc, cpms);
