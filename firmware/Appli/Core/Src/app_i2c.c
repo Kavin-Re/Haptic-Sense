@@ -38,6 +38,13 @@
  * Level 1 = SysTick's own level (sysdef.h:79). Design doc §3. */
 #define I2C_IRQ_LEVEL		1
 
+/* GPDMA channel TrustZone attributes — secure+privileged channel, secure
+ * source and secure destination. Same set as scrl_spi.c:488 and ST's
+ * stm32n6570_discovery_audio.c. See i2c1_dma_init() for why this is
+ * mandatory rather than defensive. */
+#define DMA_CHAN_ATTR		(DMA_CHANNEL_PRIV | DMA_CHANNEL_SEC | \
+				 DMA_CHANNEL_SRC_SEC | DMA_CHANNEL_DEST_SEC)
+
 /* ------------------------------------------------------------------------ */
 /* L0 state — all static, USE_IMALLOC=0 (CLAUDE.md §7)                       */
 /* ------------------------------------------------------------------------ */
@@ -65,6 +72,10 @@ static app_i2c_stats_t stats;
  * design §4.1). D-cache is OFF in this build (app_config.h:21) — rule
  * enforced anyway so a future D-cache enable cannot corrupt. */
 static UB gate_buf[32] __attribute__((aligned(32)));
+
+/* Pre-fill value for gate_buf: any byte that is neither a plausible register
+ * value nor the all-ones idle-bus value, so an untouched buffer is provable. */
+#define GATE_SENTINEL	0xA5u
 
 /* ------------------------------------------------------------------------ */
 /* HAL callbacks — ISR context, inside knl_hll_inthdr's TASK_INDEPENDENT     */
@@ -142,6 +153,8 @@ static void i2c1_msp_init(void)
  * (stm32n6xx_ll_dma.h:1287-1288); ch0=RX, ch1=TX (design decision #3). */
 static ER i2c1_dma_init(void)
 {
+	DMA_IsolationConfigTypeDef isolation;
+
 	__HAL_RCC_GPDMA1_CLK_ENABLE();	/* stm32n6xx_hal_rcc.h:865 */
 
 	hdma_i2c1_rx.Instance                 = GPDMA1_Channel0;
@@ -172,6 +185,47 @@ static ER i2c1_dma_init(void)
 	if (HAL_DMA_Init(&hdma_i2c1_tx) != HAL_OK)
 		return E_IO;
 	__HAL_LINKDMA(&hi2c1, hdmatx, hdma_i2c1_tx);
+
+	/* TRUSTZONE CHANNEL ATTRIBUTES — MANDATORY (added 2026-08-29).
+	 *
+	 * Root cause of the silent-no-transfer defect: this build is TZEN
+	 * secure (GPIOO resolves to GPIOO_S; CLAUDE.md §2), the DMA buffers
+	 * live in the SECURE AXISRAM alias (gate_buf @ 0x34013160, .map) and
+	 * I2C1 is a secure peripheral. A GPDMA channel left at its reset
+	 * attributes performs NON-SECURE accesses and can reach neither end of
+	 * the transfer. It arms, moves zero bytes, and because the I2C
+	 * generates its own STOP after NBYTES under AUTOEND, HAL still reaches
+	 * HAL_I2C_MemRxCpltCallback and reports HAL_OK. The failure is
+	 * completely silent — proven on hardware 2026-08-29: four transfers,
+	 * ok=4 err=0 recov=0, and all four buffers still held the 0xA5
+	 * sentinel.
+	 *
+	 * Pattern and CID copied from the two in-tree precedents:
+	 *   Lib/screenl/Src/scrl_spi.c:488-495  (this project's own SPI5 path)
+	 *   STM32Cube_FW_N6/Drivers/BSP/STM32N6570-DK/
+	 *       stm32n6570_discovery_audio.c:3230, 3349, 3514  (ST's BSP)
+	 * StaticCid = CID1 matches main.c:334 (RIMC_master.MasterCID =
+	 * RIF_CID_1).
+	 *
+	 * Distinct error codes so a failure is identifiable from the printed
+	 * [I2C] init= value without a debugger:
+	 *   E_ID    -> ConfigChannelAttributes failed
+	 *   E_NOSPT -> SetIsolationAttributes failed
+	 * Attributes latch: HAL_DMA_ConfigChannelAttributes has no effect if
+	 * called a second time (stm32n6xx_hal_dma.c:175), so this must run
+	 * once and correctly. i2c1_bus_recover() deliberately does NOT re-run
+	 * i2c1_dma_init(), so the attributes survive recovery. */
+	if (HAL_DMA_ConfigChannelAttributes(&hdma_i2c1_rx, DMA_CHAN_ATTR) != HAL_OK)
+		return E_ID;
+	if (HAL_DMA_ConfigChannelAttributes(&hdma_i2c1_tx, DMA_CHAN_ATTR) != HAL_OK)
+		return E_ID;
+
+	isolation.CidFiltering = DMA_ISOLATION_ON;
+	isolation.StaticCid    = DMA_CHANNEL_STATIC_CID_1;
+	if (HAL_DMA_SetIsolationAttributes(&hdma_i2c1_rx, &isolation) != HAL_OK)
+		return E_NOSPT;
+	if (HAL_DMA_SetIsolationAttributes(&hdma_i2c1_tx, &isolation) != HAL_OK)
+		return E_NOSPT;
 
 	return E_OK;
 }
@@ -409,39 +463,102 @@ ER i2c_wr(UB dev7, UW reg, UINT regsz, const UB *buf, UW len)
  * One register read through the full chain (HAL DMA -> GPDMA -> IRQ ->
  * callback -> semaphore) BEFORE any L2/ULD code exists. If GPDMA1 lacks
  * RIF/TrustZone master attributes, THIS is where it faults — in isolation.
- * Tries MPU6050 at 0x68 then 0x69 (closes the AD0 question, CLAUDE.md §2).
+ *
+ * PROBE TABLE (2026-08-29): 0x5A first — the SmartElex DRV2605L is the only
+ * part soldered today. 0x68/0x69 follow as NEGATIVE CONTROLS: with no IMU on
+ * the bus they must NACK, which proves the probe discriminates rather than
+ * ACKing everything. First ACK wins and the loop stops, so a healthy DRV2605L
+ * costs one transaction.
+ *
+ * DRV2605L expectations, ALL verified against the local datasheet copy
+ * docs/datasheets/drv2605l_datasheet.pdf (TI SLOS854D Rev D, March 2018):
+ *   - 7-bit address 0x5A                                     (§8.5.1.1; also
+ *     silkscreened "I2C ADDR 0x5A" on the SmartElex board, photo 2026-08-29)
+ *   - register 0x00 = STATUS, reset value 0xE0               (§8.6 reg map)
+ *   - STATUS bits 7:5 = DEVICE_ID, RO, default 7 = DRV2605L  (§8.6.1 Table 4)
+ *     3 = DRV2605 (non-L), 4 = DRV2604, 6 = DRV2604L.
+ *     => PASS is whoami == 0xE0. The value 3 quoted in the 2026-08-29 handoff
+ *     §5.4 was wrong; it is the non-L part number.
+ *   - EN low: the device "can still acknowledge (ACK) during an I2C
+ *     transaction, however, no read or write is possible"    (§8.4.1.3)
+ *     => gate_result == E_OK with a garbage whoami means the EN jumper is the
+ *     fault, NOT the solder joints or the bus.
+ *
+ * MPU6050 expectations (not soldered yet, negative control only): WHO_AM_I at
+ * register 0x75 reads 0x68 regardless of AD0; which address ACKs is the AD0
+ * evidence. Verified RM-MPU-6000A rev 4.0 §4.34, per
+ * docs/design/mpu6050_port_design_v1.md §0.
  *
  * FALSE-FAILURE IMMUNITY (review item 3, 2026-07-06): gate_result==E_OK
  * requires only that the transaction COMPLETES through the full chain
  * (device-address ACK -> index write -> repeated-start read -> DMA -> IRQ ->
  * callback -> semaphore). Register-mapped I2C slaves ACK any register index
  * — a wrong index returns wrong DATA, it does not NACK — so a wrong register
- * constant below can only change the printed whoami byte, never flip the
- * gate to failure. The gate fails ONLY on real bus/DMA/IRQ failure.
- * WHO_AM_I=0x75 / expected 0x68: VERIFIED against RM-MPU-6000A rev 4.0 §4.34
- * (2026-07-11 design pass, docs/design/mpu6050_port_design_v1.md §0): register
- * 117 (0x75) default 0x68; AD0 is NOT reflected in this register, so the
- * whoami byte confirms the part family only — which of 0x68/0x69 ACKed is the
- * AD0 evidence. If the printed whoami isn't 0x68, check wiring/part before
- * touching the DMA path — the DMA is proven either way.
+ * constant below can only change the printed whoami byte, never flip the gate
+ * to failure. The gate fails ONLY on real bus/DMA/IRQ failure.
+ *
+ * COST NOTE: i2c_xfer() treats a NACK (E_IO from HAL_I2C_ERROR_AF) as a fault
+ * and runs i2c1_bus_recover() + one retry, ~145 ms per absent address. Three
+ * absent addresses therefore cost ~435 ms ONCE at boot and leave recoveries
+ * ~6. That is a known defect of the shared path, not of this gate — the fix
+ * (capture hi2c->ErrorCode, map AF to a distinct code, skip recovery on a
+ * plain NACK) is deferred to the bus-scan work.
  * // ONLY CALL FROM PRIORITY 3 SENSOR TASK
  */
 void app_i2c_gate_test(void)
 {
-	static const UB addrs[2] = { 0x68u, 0x69u };
+	static const struct {
+		UB addr;	/* 7-bit */
+		UB reg;		/* register index to read */
+	} probes[3] = {
+		{ 0x5Au, 0x00u },	/* DRV2605L STATUS  -> expect 0xE0 */
+		{ 0x68u, 0x75u },	/* MPU6050 WHO_AM_I -> expect 0x68, AD0 low  */
+		{ 0x69u, 0x75u },	/* MPU6050 WHO_AM_I -> expect 0x68, AD0 high */
+	};
+	/* DRV2605L follow-up registers with DISTINCT non-zero reset values
+	 * (SLOS854D Table 3 Register Map Overview):
+	 *   0x00 STATUS       -> 0xE0
+	 *   0x01 MODE         -> 0x40
+	 *   0x03 LIBRARY_SEL  -> 0x01
+	 * All three are single-byte reads; no auto-increment is assumed. */
+	static const UB drv_regs[3] = { 0x00u, 0x01u, 0x03u };
 	INT i;
 	ER err = E_IO;
+	UW packed = 0;
 
-	for (i = 0; i < 2; i++) {
-		gate_buf[0] = 0;
-		err = i2c_rd(addrs[i], 0x75u, I2C_REG8, gate_buf, 1);
+	for (i = 0; i < 3; i++) {
+		gate_buf[0] = GATE_SENTINEL;
+		err = i2c_rd(probes[i].addr, (UW)probes[i].reg, I2C_REG8,
+			     gate_buf, 1);
 		if (err == E_OK) {
-			stats.gate_addr = addrs[i];
+			stats.gate_addr = probes[i].addr;
 			stats.gate_whoami = gate_buf[0];
 			break;
 		}
 	}
 	stats.gate_result = (W)err;
+
+	/* DMA-WROTE-THE-BUFFER PROOF (2026-08-29). gate_buf is pre-filled with
+	 * GATE_SENTINEL, never 0x00, so an untouched buffer is distinguishable
+	 * from a device that genuinely drove zeros. On a bus with pull-ups an
+	 * absent talker reads 0xFF, so 0x00 previously had exactly two possible
+	 * causes and this separates them:
+	 *   whoami == 0x0140E0 -> all three registers correct, device healthy
+	 *   whoami == 0xA5A5A5 -> DMA never wrote; HAL reached MemRxCplt off the
+	 *                         STOPF path with the byte still in RXDR
+	 *   whoami == 0x000000 -> device really drove zeros
+	 *   whoami == 0xFFFFFF -> nothing driving during the data phase
+	 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
+	if (err == E_OK && stats.gate_addr == 0x5Au) {
+		for (i = 0; i < 3; i++) {
+			gate_buf[0] = GATE_SENTINEL;
+			if (i2c_rd(0x5Au, (UW)drv_regs[i], I2C_REG8,
+				   gate_buf, 1) != E_OK)
+				break;
+			packed |= ((UW)gate_buf[0]) << (8 * i);
+		}
+		stats.gate_whoami = packed;
+	}
 }
 
 const app_i2c_stats_t *app_i2c_stats(void)

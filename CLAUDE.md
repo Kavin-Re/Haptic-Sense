@@ -6,6 +6,8 @@ Developer: solo BTech student, **zero prior experience** in RTOS, ML training, F
 
 **PHASE STATUS (2026-07-06):** Phase 3 COMPLETE (commit `7a87671`, hardware-verified: heartbeat ~503 ms, camera strip confirmed, binary 682 KB → 63 KB). **Phase 4 FULLY COMPLETE** — (a) correctness gate: four-task architecture (hazard=1 / inference=2 / sensor=3 / heartbeat=10, commit `04994a5`), ~32 min soak, ~91,000 frames in `frames==inf` lockstep, `canary_err=0` (zero torn reads), `q=0`/`qovr=0`, ~47.6 Hz (`docs/evidence/phase4/phase4_soak.log`); (b) preemption campaign (RZ3) PASSED: worst case **3.375 µs** over 2,229 events under chatter load, baseline statistically identical (see §8 RZ3 for full numbers; evidence in `docs/evidence/phase4/`). **Phase 5 IN PROGRESS** (Option A decided 2026-07-06): `DEVCNF_USE_HAL_IIC` stays `0` PERMANENTLY — app owns HAL I2C directly (see §3 "I2C driver decision"); next: own L0/L1 driver.
 
+**PHASE 5 FIRST LIGHT (2026-08-29):** First sensor ever addressed on this project. SmartElex DRV2605L ACKs at 7-bit **0x5A** on I2C1 and reads back **STATUS 0x00 = 0xE0, MODE 0x01 = 0x40, LIBRARY_SEL 0x03 = 0x01** — all three SLOS854D Table 3 reset values, `ok=4 err=0 tmo=0 recov=0`. Closes handoff §5.4 pass criteria 1 and 2, and with them the solder joints, the breadboard rails, the CN8/CN12 mapping, the HAL I2C1 config, the GPDMA primitives, the kernel IRQ registration and the Priority-3 ownership model. **Required a real fix first — see §3 "GPDMA channel attributes" (RED ZONE #9).** Evidence: `docs/evidence/phase5/PHASE5_I2C_FIRST_LIGHT_20260829.md`. Bench state: EN on a 3V3 jumper, not yet PE7; no motor; VL53L1X and MPU6050 not yet soldered.
+
 ---
 
 ## 1. TARGET & TOOLCHAIN (verify before first build)
@@ -26,14 +28,46 @@ Developer: solo BTech student, **zero prior experience** in RTOS, ML training, F
 
 | Device | 7-bit addr | Breakout | Extra pins |
 |---|---|---|---|
-| VL53L1X ToF (primary) | 0x29 | 7SEMI | XSHUT → 3.3 V rail; GPIO1 (INT) → **PD0** (ARD_D2) |
+| VL53L1X ToF (primary) | 0x29 | 7SEMI | **XSHUT → leave UNCONNECTED** (on-board pull-up to the sensor's own VDD); if a HW-reset path is ever wanted, drive it **open-drain, no internal pull-up** — low = reset, Hi-Z = run. Never hard-tie to 3V3: most VL53L1X carriers run the die from a 2.8 V LDO and XSHUT abs max is VDD+0.3 = 3.1 V. `[pending V-W-3]`. GPIO1 (INT) → **PD0** (ARD_D2 = CN11 pin 3), input, **no internal pull** (breakout already pulls it up; may be 2.8 V logic), EXTI **falling** — GPIO1 is active-low open-drain data-ready |
 | MPU6050 IMU (primary) | 0x68 (verify AD0 by bus scan; 0x69 if high) | GY-521 | INT → **PE9** (ARD_D3) |
-| DRV2605L haptic driver | 0x5A | Adafruit ×1 + SmartElex ×2 | EN → **PE7** (ARD_D8) |
+| DRV2605L haptic driver | 0x5A (silkscreened on the SmartElex board; SLOS854D §8.5.1.1) | **SmartElex ×2 = PRIMARY** · Adafruit ×1 = spare/bench only | EN → **PE7** (ARD_D8 = CN12 pin 1); IN/TRIG → **PE13** (ARD_D6 = CN11 pin 7) |
 
-Adafruit breakout exposes IN/TRIG as pin labeled `INT` (max 1.8V — requires voltage divider from a 3.3V GPIO) [source: Adafruit DRV2605L pinouts page, learn.adafruit.com]. SmartElex breakouts expose `IN` and `EN` as separately-labeled header pins [source: physical inspection of board silkscreen, July 10 2026]. All vendor breakouts wire the same DRV2605L IC pins — one firmware, interchangeable boards [source: TI SLOS854D pin functions, ti.com].
+**IN/TRIG at 3.3 V is LEGAL. There is no voltage divider anywhere in this design.** Corrected 2026-08-29 against the local datasheet copy `docs/datasheets/drv2605l_datasheet.pdf` (TI SLOS854D Rev D, March 2018): §6.1 Absolute Maximum Ratings gives EN / SDA / SCL / IN-TRIG as `−0.3 V … VDD + 0.3 V` — 3.6 V at VDD = 3.3 V; §6.3 gives `VIH min 1.3 V`. The "1.8 V" that blocked this item for a month is §6.3 `VI(ANA) — Input voltage (analog mode), IN/TRIG: 0 … 1.8 V`, the full-scale reference for **analog input mode, which this project does not use**. **Derived rule, permanent:** the ceiling tracks VDD, so **PE7 (EN) and PE13 (TRIG) must be initialised LOW at reset and may only be driven high after the breakout's 3V3 rail is up.**
+
+**The Adafruit board does NOT break out EN** — its pin set is VIN, GND, SCL, SDA, STEMMA QT, Motor±, INT, power-LED jumper [learn.adafruit.com DRV2605L pinouts, fetched 2026-08-29]. TI requires EN high for register access (§8.4.1.3), so the Adafruit unit must have EN tied high on-board and is therefore **permanently enabled** — it cannot take part in EN-arbitrated sequential init and will collide at 0x5A. **SmartElex is primary.** SmartElex silkscreen order, mounting-hole end first: **GND · VCC · SDA · SCL · IN · EN**, motor pads O−/O+ on the opposite edge [board photo 2026-08-29]. **IN and EN are adjacent — trivially swapped; label the wires.** Silkscreen is on the top face and the header pins on the bottom, so flipping the board reverses left-to-right; use the mounting hole as the landmark from either side.
+
+SmartElex I2C pull-ups are **2.2 kΩ ("222") with an `I2C-PU` jumper**. Budget against the 1.5 kΩ onboard pair: board alone 1500 Ω / 2.2 mA; +1 SmartElex 892 Ω / 3.7 mA (over the 3 mA I2C budget but tolerable — VOL only has to stay under VIL = 0.99 V); +2 SmartElex 634 Ω / 5.2 mA — **not acceptable**. **Open the I2C-PU jumper on at least one SmartElex before the full bus is assembled.** Rise time is never the problem here: 892 Ω × ~100 pF ⇒ tr ≈ 76 ns, well inside the 300 ns fast-mode limit.
+
+**EN low ≠ absent.** §8.4.1.3: with EN low the device still ACKs its address but no register read or write is possible. So an address ACK proves the bus and the joints; only a successful **register read** proves EN. STATUS (0x00) reset value is **0xE0**, DEVICE_ID bits 7:5 = **7** for the DRV2605L (§8.6.1 Table 4). **7, not 3 — 3 is the non-L DRV2605.**
+
+All vendor breakouts wire the same DRV2605L IC pins — one firmware, interchangeable boards [TI SLOS854D pin functions].
 
 ### Arduino header pin map (subset in use)
-D15/PH9=SCL · D14/PC1=SDA · D8/PE7=DRV_EN · D7/PD6=**TIMING_D1** · D6/PE13=**DRV_TRIG** · D4/PH5=**TIMING_D0** · D3/PE9=IMU_INT · D2/PD0=TOF_INT
+**Always quote the connector pin, not just the Arduino name — "D15" is not actionable at the bench at 1 a.m.; "CN12 pin 10" is.** ARDUINO connectors are **CN7 (analog) · CN8 (power) · CN11 (D0–D7) · CN12 (D8–D15)** [UM3300 Rev 1 §8.7, Table 16]. **CN10 is the MIPI20 debug connector — never plug anything into it** [§8.8].
+
+| Signal | Arduino | MCU | Connector pin |
+|---|---|---|---|
+| **+3V3 supply** | — | — | **CN8 pin 4** |
+| **GND** | — | — | **CN8 pin 7** (pin 6 also GND; CN12 pin 7 = GND on the digital header) |
+| SCL | D15 | PH9 | CN12 pin 10 |
+| SDA | D14 | PC1 | CN12 pin 9 |
+| DRV_EN (ch A) | D8 | PE7 | CN12 pin 1 |
+| DRV_TRIG (ch A) | D6 | PE13 | CN11 pin 7 |
+| IMU_INT | D3 | PE9 | CN11 pin 4 |
+| TOF_INT | D2 | PD0 | CN11 pin 3 |
+| **TIMING_D0** | D4 | PH5 | CN11 pin 5 — LA probe, **do not reuse** |
+| **TIMING_D1** | D7 | PD6 | CN11 pin 8 — LA probe, **do not reuse** |
+
+> **CN8 pin 5 is +5V and physically adjacent to pin 4.** A one-pin slip destroys every breakout on the rail; pin 3 on the other side is NRST. Count twice from the connector end and meter pin 4 → pin 7 (expect 3.25–3.35 V) before connecting anything.
+
+Expansion channels, free and verified: ch B **EN D5/PE10, TRIG D9/PE14**; ch C **EN D10/PA3, TRIG D11/PG2**. Leaves D0/PF6, D1/PD5, D12/PH8, D13/PE15 free (**D13 also drives LD6 — avoid**). All three DRV2605L parts answer at the fixed 0x5A, so channels are distinguished by EN-arbitrated sequential init plus a per-channel TRIG.
+
+### PERMANENT BUS-HYGIENE RULES (not one-time checks — these bite again during integration)
+- **The MB1854 camera FFC must stay unplugged from CN14.** UM3300 Table 19: CN14 pin 20 = I2C1_SCL (PH9), pin 21 = I2C1_SDA (PC1) — the same nets as D14/D15 — and its VL53L5CX also answers at **0x29**, colliding with the VL53L1X. VDD_CAM is gated by SB53 (OFF by default) but do not rely on that.
+- **Nothing in CN4 (STMod+), ever.** UM3300 Table 13: CN4 pin 7 = I2C1_SCL, pin 10 = I2C1_SDA; §8.4 warns explicitly that STMod+ signals are shared with the ARDUINO connectors. The MB1280 fan-out board also brings its own regulator and level shifters.
+- LCD touch is on **I2C2** (PD14/PD4) — not a conflict, leave it alone.
+- **Power with a C-to-C cable.** UM3300 §6.1 note 1: Type-A-to-C limits supply to ~550 mA.
+- A4/A5 have an alternate I2C1 route via solder bridges SB31–SB34; **D14/D15 are hard-wired to PC1/PH9 and are not affected.** Leave all four bridges alone.
 
 **DRV_TRIG resolved (HAP-T5 CLOSED, 2026-08-26):** D6 = **PE13** — verified against the MB1939 Rev C-02 schematic, sheet 9 (Arduino/ST Zio header, CN11 pin 7). Free, GPIO-output capable, not shared with any other onboard peripheral (checked against camera FFC CN14 and every other schematic sheet — no aliasing). **D6 (PE13) and D7 (PD6, TIMING_D1) are different pins** — do not conflate. Fallback: D5 = PE10, equally verified free, recorded as the alternate if D6 is ever needed for something else.
 
@@ -86,6 +120,41 @@ SCB_InvalidateDCache_by_Addr((uint32_t*)sensor_buf, sizeof(sensor_buf));
 ```
 NPU-managed buffers are covered by the `--cache-maintenance` flag in `user_neuralart.json` — that flag covers ONLY NPU buffers, not the I2C DMA buffers.
 **D-cache enable is GATED on closing F-6a (write-side clean in the primitive), F-6b (ULD bounce buffer in the shim), F-6c (DRV2605L buffer rule) — see `docs/PROJECT_DEFENSE.md` §2.2.** D-cache is OFF today (`app_config.h:21`); flipping it without those three fixes arms three latent corruption defects at once.
+
+### GPDMA channel attributes (RED ZONE #9 — silent failure mode, cost a full bench session 2026-08-29)
+
+**Every GPDMA/HPDMA channel used on this target MUST be given explicit security, privilege and CID attributes
+immediately after `HAL_DMA_Init()` + `__HAL_LINKDMA()`, or it will silently transfer NOTHING.**
+
+```c
+/* app_i2c.c i2c1_dma_init(), TK_PRI 3 */
+HAL_DMA_ConfigChannelAttributes(&hdma, DMA_CHANNEL_PRIV | DMA_CHANNEL_SEC |
+                                       DMA_CHANNEL_SRC_SEC | DMA_CHANNEL_DEST_SEC);
+DMA_IsolationConfigTypeDef iso = { .CidFiltering = DMA_ISOLATION_ON,
+                                   .StaticCid    = DMA_CHANNEL_STATIC_CID_1 };
+HAL_DMA_SetIsolationAttributes(&hdma, &iso);
+```
+
+Why: this build is TrustZone-secure (GPIOO resolves to `GPIOO_S`), the DMA buffers live in the **secure** AXISRAM
+alias (`gate_buf` @ `0x34013160`, see the `.map`), and I2C1 is a secure peripheral. A channel left at reset
+attributes performs **non-secure** accesses and can reach neither end of the transfer. It arms, moves zero bytes,
+and because the I2C generates its own STOP after NBYTES under AUTOEND, HAL still reaches
+`HAL_I2C_MemRxCpltCallback` and returns success. **There is no error anywhere.** Measured on hardware 2026-08-29:
+`init=0 gate=0 ok=4 err=0 tmo=0 recov=0` with all four destination buffers still holding their pre-fill byte.
+`StaticCid = CID1` matches `main.c:334` (`RIMC_master.MasterCID = RIF_CID_1`).
+Precedents already in this tree: `Lib/screenl/Src/scrl_spi.c:488-495` (this project's own SPI5 path) and
+`STM32Cube_FW_N6/Drivers/BSP/STM32N6570-DK/stm32n6570_discovery_audio.c:3230, 3349, 3514` (ST's own BSP).
+Attributes **latch** — `HAL_DMA_ConfigChannelAttributes` has no effect if called twice
+(`stm32n6xx_hal_dma.c:175`), so it must run once and correctly; `i2c1_bus_recover()` deliberately does not
+re-run `i2c1_dma_init()`.
+
+### NEVER pre-fill a DMA destination buffer with a value you would accept as a reading
+
+Corollary of #9, and the only reason it was caught. `gate_buf[0] = 0` before a register read made an untransferred
+buffer indistinguishable from a device genuinely driving zeros — and on a pulled-up I2C bus an absent talker reads
+**0xFF**, never 0x00, so 0x00 should have been suspicious from the first look. Pre-fill with a sentinel
+(`0xA5`) that is neither a plausible register value nor the idle-bus value, and **verify against a known non-zero
+reset value** (DRV2605L STATUS = 0xE0, MODE = 0x40, LIBRARY_SEL = 0x01) rather than against "the call returned OK".
 
 ### Preemption instrumentation (from Day 1 of task code, guard with `#ifdef DEBUG_TIMING`)
 - GPIO method for logic analyzer (contest evidence): PH5 (D0) set at hazard-signal, PD6 (D1) set at haptic-EN. Δt(D0→D1) on PulseView = preemption latency. LA: 24 MHz sigrok clone (verify `sigrok-cli --scan`).
@@ -154,6 +223,7 @@ Fallback BSP: official tron-forum/mtk3_bsp2 **v1.00.04 (May 2026) officially sup
 | 6 | NPU silent CPU fallback | FC/ReLU/Sigmoid only |
 | 7 | Task priorities free | PRE-WORK DONE 2026-07-05: priorities 1/2/3/10 verified free (`config.h:27`, range 1–32; heartbeat=10, main_thread=15). Wrinkle: kernel inittask is created at TK_PRI 1 (`inittask.h:26`), runs `usermain()`, then parks forever on `tk_slp_tsk(TMO_FEVR)` (`main.c:107`) — permanently dormant, never preempts; µT-Kernel allows multiple tasks per priority, so the Phase 4 Hazard task at TK_PRI 1 coexists safely |
 | 8 | ERM GPIO damage | RESOLVED by DRV2605L (ordered ×3); rule stands permanently |
+| **9** | **GPDMA channel security attributes** | RESOLVED 2026-08-29 in `app_i2c.c` `i2c1_dma_init()` — rule is PERMANENT and applies to every future DMA channel (see §3). Failure mode is silent success with an untouched buffer; it would have fed the Edge Impulse training set pure garbage and surfaced weeks later as an ML problem |
 | — | I2C pull-up conflict | RESOLVED: 1.5 kΩ onboard on I2C1 & I2C2, add nothing |
 | — | µT-Kernel M55 port | RESOLVED: copy mtk3_bsp2 from repo (fallback: official v1.00.04) |
 
@@ -165,7 +235,10 @@ Fallback BSP: official tron-forum/mtk3_bsp2 **v1.00.04 (May 2026) officially sup
 - H-D5: breakout VDD rail — measurement attempted July 10, inconclusive (unstable meter reading, likely breadboard contact); assume 3.3V, remeasure pending.
 - H-D6: ERM coil resistance vs 4Ω OC threshold — PROVISIONALLY CLEARED: estimated 25–37.5Ω from vendor rated V/I (3V / 80–120mA); direct multimeter measurement still pending [source: vendor spec sheet, ERM coin type 3VDC 80–120mA].
 - H-D7: DEV_RESET self-clear time — instrument on first hardware run.
-- H-D8: I2C1 SCL ≤ 400 kHz with DRV2605L on shared bus — confirm timing constant.
+- H-D8: I2C1 SCL ≤ 400 kHz with DRV2605L on shared bus — **CLOSED 2026-08-29.** SLOS854D §6.7 Switching Characteristics: `f(SCL)` max **400 kHz** with no wait states. `I2C_BUS_HZ 400000` (`app_i2c.h:15`) is legal; measured working at pclk1 = 200 MHz.
+- H-D6 addendum: SLOS854D §6.3 gives `ZL` min **8 Ω at VDD = 5.2 V**, footnoted "ensured by design, not production tested" — quote the condition, not a bare 8 Ω. Direct measurement (V-W-6) still owed before any motor is connected.
+- **H-D9 (new, 2026-08-29): DRV2605L register access CONFIRMED on hardware.** STATUS 0xE0 / MODE 0x40 / LIBRARY_SEL 0x01 read back over I2C1 DMA from the SmartElex board. **Write direction is still UNPROVEN — `hdma_i2c1_tx` has never moved a byte** (a Mem_Read sends the register index via TXIS, not TX DMA). Close it with handoff §5.4 step 3 (write a scratch value, read it back) before trusting any DRV2605L configuration.
+- **H-D10 (new): EN is still on a 3V3 bench jumper, not PE7.** Handoff §5.4 step 4 — move EN to CN12 pin 1 (D8/PE7) and re-read the registers. Pass on the rail but fail on PE7 ⇒ GPIO config, not the board.
 
 ## 9. HOW TO BEHAVE (Claude Code)
 
