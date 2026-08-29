@@ -34,8 +34,30 @@ void drv2605l_gpio_init(void);
 ER drv2605l_power_up(void);
 
 /* Drive TRIG. TK_PRI 1 (hazard_task) only — GPIO, no I2C, no printf.
- * Block 1 replaces this with the ~2 us edge pulse; today it is a level so the
- * Phase 4 hazard pattern stays observable on the logic analyzer. */
+ * NO-OP until drv2605l_init() has armed the device: firing a trigger at a
+ * part that is still in standby or mid-configuration is meaningless, and once
+ * TRIG is physically wired it would fire effects during init.
+ * Block 1b replaces this level with the ~2 us edge pulse. */
 void drv2605l_trig_set(BOOL on);
+
+/* Full register init: configure for open-loop ERM, select the waveform, arm
+ * for external edge trigger, and verify the arming by readback.
+ * Call AFTER app_i2c_init(). Does NOT drive the motor — no GO bit is set and
+ * no diagnostics run, so this is safe with nothing connected to OUT+/OUT-.
+ * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
+ER drv2605l_init(void);
+
+/* Bring-up observability. Single writer (sensor task, TK_PRI 3); the heartbeat
+ * task reads it. 32-bit reads are atomic on ARMv8-M. */
+typedef struct {
+	W	init_result;	/* 1 = not run; E_OK = armed and verified   */
+	UW	device_id;	/* STATUS 0x00 bits 7:5, expect 7 = DRV2605L */
+	UW	mode_rb;	/* 0x01 readback, expect 0x01               */
+	UW	lib_rb;		/* 0x03 readback, expect 0x02 (Library B)   */
+	UW	seq_rb;		/* 0x04 readback, expect 0x01 (effect 1)    */
+	UW	armed;		/* 1 once the readback check passed         */
+} drv2605l_stats_t;
+
+const drv2605l_stats_t *drv2605l_get_stats(void);
 
 #endif /* APP_DRV2605L_H */

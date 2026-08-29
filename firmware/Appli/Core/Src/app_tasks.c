@@ -334,8 +334,15 @@ static void sensor_task_fct(INT stacd, void *exinf)
 	(void)drv2605l_power_up();
 
 	i2c_init_result = (W)app_i2c_init();
-	if (i2c_init_result == E_OK)
+	if (i2c_init_result == E_OK) {
 		app_i2c_gate_test();
+
+		/* Block 1a: configure and arm the DRV2605L. Writes registers
+		 * only — no GO bit, no diagnostics — so it is safe with nothing
+		 * connected to OUT+/OUT-. Result lands in drv2605l_get_stats().
+		 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
+		(void)drv2605l_init();
+	}
 
 	for (;;) {
 		sensor_fill_frame();
@@ -386,6 +393,13 @@ static void heartbeat_task_fct(INT stacd, void *exinf)
 				  s->gate_addr,
 				  s->xfer_ok, s->xfer_err, s->timeouts, s->recoveries,
 				  s->clk_pclk1_hz, s->clk_sysclk_hz);
+		}
+
+		{	/* Block 1a: DRV2605L configuration + arming readback */
+			const drv2605l_stats_t *d = drv2605l_get_stats();
+			tm_printf((UB *)"[DRV] init=%d id=%u mode=0x%x lib=0x%x seq=0x%x armed=%u\n",
+				  (INT)d->init_result, d->device_id,
+				  d->mode_rb, d->lib_rb, d->seq_rb, d->armed);
 		}
 
 #ifdef DEBUG_TIMING
