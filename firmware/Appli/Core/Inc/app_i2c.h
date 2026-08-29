@@ -27,6 +27,8 @@ typedef struct {
 	UW	timeouts;	/* tk_wai_sem E_TMOUT count               */
 	UW	recoveries;	/* bus-recovery invocations               */
 	W	gate_result;	/* E_OK once the L1 gate test passed      */
+	W	gate_wr;	/* H-D9: 1 = not run, E_OK = write proven */
+	UW	gate_wr_seen;	/* byte read back after the scratch write */
 	UW	gate_whoami;	/* WHO_AM_I byte read by the gate test    */
 	UW	gate_addr;	/* 7-bit address that answered (AD0 q.)   */
 	UW	clk_pclk1_hz;	/* logged at init — design §6 verification */

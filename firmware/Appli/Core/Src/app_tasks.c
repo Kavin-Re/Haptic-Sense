@@ -46,6 +46,7 @@
 #include "app_tasks.h"
 
 #include "app_i2c.h"
+#include "app_drv2605l.h"
 #include "stm32n6xx_hal.h"
 #include "tk/tkernel.h"
 #include "tm/tmonitor.h"
@@ -189,12 +190,20 @@ static void hazard_task_fct(INT stacd, void *exinf)
 		if (r.seq != r.seq_check)
 			stat_canary_errs++;
 
-		/* DRV_EN (PE7/D8): pattern = hazard level. No DRV2605L attached
-		 * in Phase 4 — the LA observes this pin. Priority-1 task touches
-		 * EN/GPIO ONLY (CLAUDE.md §2); DRV2605L I2C config happens at
-		 * init from the Priority-3 task context in Phase 5. */
-		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_7,
-				  r.hazard ? GPIO_PIN_SET : GPIO_PIN_RESET);
+		/* DRV_TRIG (PE13/D6, CN11 pin 7): pattern = hazard level.
+		 * MOVED OFF PE7 2026-08-30 — PE7 is now DRV_EN and a real
+		 * DRV2605L is on it. EN low is device shutdown (SLOS854D
+		 * §8.4.1.3: the part still ACKs its address but permits no
+		 * register access), so driving EN with the hazard level would
+		 * kill the Priority-3 register reads on every non-hazard frame
+		 * and look exactly like a wiring fault.
+		 * Priority-1 task touches GPIO ONLY (CLAUDE.md §2); all
+		 * DRV2605L I2C configuration happens at init from TK_PRI 3.
+		 * Block 1 replaces this level with the ~2 us edge pulse the
+		 * DRV2605L actually wants — a level held high while GO is high
+		 * CANCELS playback (HAP-T3), so this is a placeholder, not the
+		 * design. TRIG is not wired to the breakout yet. */
+		drv2605l_trig_set(r.hazard ? TRUE : FALSE);
 		if (r.hazard)
 			stat_hazard_events++;
 
@@ -318,6 +327,12 @@ static void sensor_task_fct(INT stacd, void *exinf)
 	 * pipeline below keeps running either way (bounded worst case ~290 ms:
 	 * 2 addresses x ~145 ms per-transfer worst case incl. recovery+retry).
 	 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
+	/* EN must be high BEFORE any register access to 0x5A: with EN low the
+	 * DRV2605L ACKs its address but permits no read or write (SLOS854D
+	 * §8.4.1.3), which presents as a healthy bus returning garbage.
+	 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
+	(void)drv2605l_power_up();
+
 	i2c_init_result = (W)app_i2c_init();
 	if (i2c_init_result == E_OK)
 		app_i2c_gate_test();
@@ -365,9 +380,10 @@ static void heartbeat_task_fct(INT stacd, void *exinf)
 
 		{	/* Phase 5 L1 gate + clock verification (design doc §6) */
 			const app_i2c_stats_t *s = app_i2c_stats();
-			tm_printf((UB *)"[I2C] init=%d gate=%d whoami=0x%x addr=0x%x ok=%u err=%u tmo=%u recov=%u pclk1=%u sysclk=%u\n",
+			tm_printf((UB *)"[I2C] init=%d gate=%d whoami=0x%x wr=%d wrseen=0x%x addr=0x%x ok=%u err=%u tmo=%u recov=%u pclk1=%u sysclk=%u\n",
 				  (INT)i2c_init_result, (INT)s->gate_result,
-				  s->gate_whoami, s->gate_addr,
+				  s->gate_whoami, (INT)s->gate_wr, s->gate_wr_seen,
+				  s->gate_addr,
 				  s->xfer_ok, s->xfer_err, s->timeouts, s->recoveries,
 				  s->clk_pclk1_hz, s->clk_sysclk_hz);
 		}
@@ -420,13 +436,11 @@ static void app_gpio_init(void)
 	HAL_GPIO_Init(GPIOO, &gpio_init);
 	HAL_GPIO_WritePin(GPIOO, GPIO_PIN_1, GPIO_PIN_RESET);
 
-	/* DRV_EN (PE7/D8) — hazard_task's actuator pin, observed on LA in
-	 * Phase 4. GPIOE clock already enabled by CONSOLE_Config (PE5/PE6),
-	 * enabled again here defensively. */
-	__HAL_RCC_GPIOE_CLK_ENABLE();
-	gpio_init.Pin = GPIO_PIN_7;
-	HAL_GPIO_Init(GPIOE, &gpio_init);
-	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_7, GPIO_PIN_RESET);
+	/* DRV_EN (PE7/D8, CN12 pin 1) and DRV_TRIG (PE13/D6, CN11 pin 7) are
+	 * owned entirely by app_drv2605l.c — both configured push-pull and
+	 * driven LOW before they become outputs. Do not configure either pin
+	 * here; abs max on both tracks the breakout's VDD (CLAUDE.md §2). */
+	drv2605l_gpio_init();
 
 #ifdef DEBUG_TIMING
 	/* TIMING_D0 = PH5 (D4), TIMING_D1 = PD6 (D7) — CLAUDE.md §2/§3 */

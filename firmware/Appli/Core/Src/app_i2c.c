@@ -505,6 +505,70 @@ ER i2c_wr(UB dev7, UW reg, UINT regsz, const UB *buf, UW len)
  * plain NACK) is deferred to the bus-scan work.
  * // ONLY CALL FROM PRIORITY 3 SENSOR TASK
  */
+/*
+ * H-D9 — WRITE-DIRECTION PROOF (2026-08-30). TK_PRI 3 only.
+ *
+ * Until this passes, `hdma_i2c1_tx` has never moved a byte in this project:
+ * a HAL Mem_Read sends its register index through the TXIS interrupt, not
+ * through TX DMA, so the four reads that proved the RX path say nothing about
+ * the TX path. Every device driver in this design is writes -- VL53L1X_SensorInit
+ * alone is ~91 of them -- so this is the gate in front of all of them.
+ *
+ * Target: DRV2605L register 0x02 RTP_INPUT, reset value 0x00 (SLOS854D Table 3).
+ * Safe to scribble on: MODE (0x01) resets to 0x40, i.e. STANDBY=1 with MODE[2:0]
+ * = 0 (internal trigger), so RTP mode is not selected and the register drives
+ * nothing; no motor is connected either. The original value is read first and
+ * restored afterwards, and the restore is itself verified -- so a pass proves
+ * TWO independent writes, not one.
+ *
+ * Every DMA touches gate_buf only (F-6c: one aligned file-static buffer per
+ * transfer), pre-filled with GATE_SENTINEL before each read so an untransferred
+ * buffer can never be mistaken for a reading.
+ * // ONLY CALL FROM PRIORITY 3 SENSOR TASK
+ */
+#define DRV_ADDR7		0x5Au
+#define DRV_REG_RTP_INPUT	0x02u
+#define DRV_SCRATCH		0x27u	/* not the sentinel, not the reset value */
+
+static ER drv2605l_write_probe(void)
+{
+	UB orig;		/* CPU-only copy; never a DMA endpoint */
+	ER err;
+
+	gate_buf[0] = GATE_SENTINEL;
+	err = i2c_rd(DRV_ADDR7, DRV_REG_RTP_INPUT, I2C_REG8, gate_buf, 1);
+	if (err != E_OK)
+		return err;
+	orig = gate_buf[0];
+
+	gate_buf[0] = DRV_SCRATCH;
+	err = i2c_wr(DRV_ADDR7, DRV_REG_RTP_INPUT, I2C_REG8, gate_buf, 1);
+	if (err != E_OK)
+		return err;		/* the transfer itself failed */
+
+	gate_buf[0] = GATE_SENTINEL;
+	err = i2c_rd(DRV_ADDR7, DRV_REG_RTP_INPUT, I2C_REG8, gate_buf, 1);
+	if (err != E_OK)
+		return err;
+	stats.gate_wr_seen = gate_buf[0];
+	if (gate_buf[0] != DRV_SCRATCH)
+		return E_IO;		/* transfer "succeeded" but the byte never landed */
+
+	gate_buf[0] = orig;
+	err = i2c_wr(DRV_ADDR7, DRV_REG_RTP_INPUT, I2C_REG8, gate_buf, 1);
+	if (err != E_OK)
+		return err;
+
+	gate_buf[0] = GATE_SENTINEL;
+	err = i2c_rd(DRV_ADDR7, DRV_REG_RTP_INPUT, I2C_REG8, gate_buf, 1);
+	if (err != E_OK)
+		return err;
+	if (gate_buf[0] != orig)
+		return E_IO;		/* restore did not take */
+
+	return E_OK;
+}
+
 void app_i2c_gate_test(void)
 {
 	static const struct {
@@ -525,6 +589,8 @@ void app_i2c_gate_test(void)
 	INT i;
 	ER err = E_IO;
 	UW packed = 0;
+
+	stats.gate_wr = 1;		/* 1 = not run (0 would read as E_OK) */
 
 	for (i = 0; i < 3; i++) {
 		gate_buf[0] = GATE_SENTINEL;
@@ -558,6 +624,7 @@ void app_i2c_gate_test(void)
 			packed |= ((UW)gate_buf[0]) << (8 * i);
 		}
 		stats.gate_whoami = packed;
+		stats.gate_wr = (W)drv2605l_write_probe();
 	}
 }
 
