@@ -355,6 +355,7 @@ static volatile W i2c_init_result = 1;	/* 1 = not yet run; E_OK/E_xx after */
 static void sensor_task_fct(INT stacd, void *exinf)
 {
 	ER err;
+	UW sensor_poll_div = 0u;
 
 	/* Phase 5 MANDATORY GATE (L1 design doc, review 2026-07-06): init I2C1
 	 * + prove DMA moves bytes with ONE register read, in isolation, BEFORE
@@ -396,6 +397,26 @@ static void sensor_task_fct(INT stacd, void *exinf)
 			stat_dataq_ovr++;	/* queue full: frame dropped */
 
 		stat_frames++;
+
+		/* DRV2605L health + config validity, ~1 Hz. TK_PRI 3 owns all
+		 * I2C (CLAUDE.md §3), so this is the only context it may run
+		 * in. Two 1-byte register reads via DMA, ~250 us total once per
+		 * 50 frames — well inside the 20 ms frame budget.
+		 *
+		 * MANDATORY BEFORE THE MOTOR IS CONNECTED (T3): OC_DETECT and
+		 * OVER_TEMP latch and then CLEAR ON READ, so without this poll
+		 * a driver fault is unobservable and a weak or silent motor has
+		 * no distinguishing evidence.
+		 *
+		 * COUNTING NOTE: this makes the [I2C] ok= counter grow by 2 per
+		 * second for ever. ok is no longer a fixed 24 — it is
+		 * 24 + 2*polls, and [DRV] prints polls so the two can be
+		 * reconciled. A stalled ok= now means a stalled sensor task. */
+		if (++sensor_poll_div >= (1000u / SENSOR_PERIOD_MS)) {
+			sensor_poll_div = 0u;
+			drv2605l_poll();
+		}
+
 		tk_slp_tsk(SENSOR_PERIOD_MS);	/* 50 Hz frame pacing */
 	}
 }
@@ -446,6 +467,12 @@ static void heartbeat_task_fct(INT stacd, void *exinf)
 			tm_printf((UB *)"[TRG] pulses=%u suppressed=%u cyc=%u rst=%u rstmode=0x%x\n",
 				  d->pulses, d->suppressed, d->pulse_cycles,
 				  d->rst_polls, d->rst_mode);
+			/* faults= is STICKY: OVER_TEMP|OC_DETECT latch and clear
+			 * on read, so a nonzero value means a fault happened at
+			 * some point, not that one is happening now. Nonzero at
+			 * any time after the motor is connected is a STOP. */
+			tm_printf((UB *)"[HLT] polls=%u faults=0x%x cfglost=%u\n",
+				  d->polls, d->faults_seen, d->cfg_lost);
 		}
 
 		{	/*

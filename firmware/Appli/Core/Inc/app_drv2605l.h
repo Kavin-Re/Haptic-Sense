@@ -72,6 +72,24 @@ BOOL drv2605l_trig_fire(UW want_interval_ms);
  * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
 ER drv2605l_init(void);
 
+/*
+ * Periodic health + config-validity read. Call at roughly 1 Hz from
+ * sensor_task. NO-OP until drv2605l_init() has armed the device.
+ *
+ * This is the ONLY thing that can ever report a DRV2605L fault. STATUS bits 1
+ * (OVER_TEMP) and 0 (OC_DETECT) are latching and CLEAR ON READ (SLOS854D
+ * Table 4), so a value seen once is gone; faults_seen latches them for the
+ * life of the boot. OC_DETECT is the device's own verdict that the load
+ * impedance is below threshold -- the runtime counterpart to V-W-6, and the
+ * difference between "the motor does not buzz" and "the motor does not buzz
+ * AND the driver says the coil is out of spec".
+ *
+ * It also re-reads MODE as the sole authority on config validity
+ * (plan v2 Block 1 step 5).
+ * // ONLY CALL FROM PRIORITY 3 SENSOR TASK
+ */
+void drv2605l_poll(void);
+
 /* Bring-up observability. Single writer (sensor task, TK_PRI 3); the heartbeat
  * task reads it. 32-bit reads are atomic on ARMv8-M. */
 typedef struct {
@@ -88,6 +106,9 @@ typedef struct {
 	UW	pulse_cycles;	/* CPU cycles per ~2 us pulse, from CPUCLK  */
 	UW	rst_polls;	/* H-D7: MODE reads until DEV_RESET cleared */
 	UW	rst_mode;	/* MODE after reset, expect 0x40            */
+	UW	polls;		/* drv2605l_poll() calls; ok = 24 + 2*polls */
+	UW	faults_seen;	/* STICKY OR of OVER_TEMP|OC_DETECT         */
+	UW	cfg_lost;	/* polls where MODE was no longer 0x01      */
 } drv2605l_stats_t;
 
 const drv2605l_stats_t *drv2605l_get_stats(void);

@@ -526,11 +526,24 @@ ER i2c_wr(UB dev7, UW reg, UINT regsz, const UB *buf, UW len)
  * alone is ~91 of them -- so this is the gate in front of all of them.
  *
  * Target: DRV2605L register 0x02 RTP_INPUT, reset value 0x00 (SLOS854D Table 3).
- * Safe to scribble on: MODE (0x01) resets to 0x40, i.e. STANDBY=1 with MODE[2:0]
- * = 0 (internal trigger), so RTP mode is not selected and the register drives
- * nothing; no motor is connected either. The original value is read first and
- * restored afterwards, and the restore is itself verified -- so a pass proves
- * TWO independent writes, not one.
+ * Safe to scribble on -- but for ONE reason, not the three originally written
+ * here. RTP_INPUT drives the actuator only in RTP mode (MODE[2:0] = 5, Table 2),
+ * and this design never selects mode 5. That premise is permanent.
+ *
+ * The other two premises have expired and are kept here as a warning:
+ *   - "MODE resets to 0x40, i.e. STANDBY=1" is FALSE on every boot after the
+ *     first. The DRV2605L RETAINS its configuration across an MCU reset
+ *     (measured 2026-08-30: this gate test packed whoami=0x0201E0, i.e.
+ *     MODE=0x01 -- STANDBY=0, edge-trigger ARMED -- before drv2605l_init()
+ *     had written anything). The part is AWAKE while this probe runs.
+ *   - "no motor is connected either" stops being true at T3.
+ * What keeps an awake, armed part from firing during this probe is that
+ * IN/TRIG is held LOW by drv2605l_gpio_init() from reset and is not raised
+ * until drv_armed goes TRUE at the end of drv2605l_init(). Do not remove that
+ * gate, and do not restore the deleted premises to this comment.
+ *
+ * The original value is read first and restored afterwards, and the restore is
+ * itself verified -- so a pass proves TWO independent writes, not one.
  *
  * Every DMA touches gate_buf only (F-6c: one aligned file-static buffer per
  * transfer), pre-filled with GATE_SENTINEL before each read so an untransferred

@@ -431,6 +431,34 @@ done:
 	return err;
 }
 
+/* STATUS bit 1 OVER_TEMP, bit 0 OC_DETECT. DIAG_RESULT (bit 3) is deliberately
+ * NOT latched here: it is only meaningful straight after a MODE=6 diagnostic,
+ * which this design does not run at boot (Decision 4), so latching it would
+ * manufacture a fault out of an undefined value. */
+#define DRV_STATUS_FAULT_MASK	0x03u
+
+/* // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
+void drv2605l_poll(void)
+{
+	UB v;
+
+	if (!drv_armed)
+		return;
+
+	dstats.polls++;
+
+	if (drv_rd8(DRV_REG_STATUS, &v) == E_OK) {
+		dstats.status_rb   = (UW)v;	/* now LIVE, not a snapshot */
+		dstats.faults_seen |= (UW)(v & DRV_STATUS_FAULT_MASK);
+	}
+
+	if (drv_rd8(DRV_REG_MODE, &v) == E_OK) {
+		dstats.mode_rb = (UW)v;
+		if (v != DRV_MODE_EDGE_TRIG)
+			dstats.cfg_lost++;	/* armed config no longer holds */
+	}
+}
+
 const drv2605l_stats_t *drv2605l_get_stats(void)
 {
 	return &dstats;
