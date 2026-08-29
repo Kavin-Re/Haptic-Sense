@@ -148,6 +148,12 @@ static volatile UW stat_inferences;	/* writer: inference_task */
 static volatile UW stat_hazard_events;	/* writer: hazard_task    */
 static volatile UW stat_canary_errs;	/* writer: hazard_task    */
 
+/* T1 (2026-08-30) — DWT liveness, written once at init, read by heartbeat.
+ * 0 = CYCCNT is NOT counting and every DWT-derived number is void. */
+static volatile UW dwt_ok;
+static UW hb_prev_cyc;			/* heartbeat-local, TK_PRI 10 only */
+static UW hb_prev_ms;
+
 #ifdef DEBUG_TIMING
 /* DWT corroboration (Red Zone #3). dwt_t0 written by inference_task at
  * D0-set, read by hazard_task at D1-set — strictly ordered by the
@@ -393,13 +399,52 @@ static void heartbeat_task_fct(INT stacd, void *exinf)
 				  s->gate_addr,
 				  s->xfer_ok, s->xfer_err, s->timeouts, s->recoveries,
 				  s->clk_pclk1_hz, s->clk_sysclk_hz);
+			tm_printf((UB *)"[CLK] cpu=%u sysb=%u pclk1=%u\n",
+				  s->clk_cpu_hz, s->clk_sysclk_hz,
+				  s->clk_pclk1_hz);
 		}
 
 		{	/* Block 1a: DRV2605L configuration + arming readback */
 			const drv2605l_stats_t *d = drv2605l_get_stats();
-			tm_printf((UB *)"[DRV] init=%d id=%u mode=0x%x lib=0x%x seq=0x%x armed=%u\n",
+			tm_printf((UB *)"[DRV] init=%d id=%u mode=0x%x lib=0x%x seq=0x%x odc=0x%x sts=0x%x armed=%u\n",
 				  (INT)d->init_result, d->device_id,
-				  d->mode_rb, d->lib_rb, d->seq_rb, d->armed);
+				  d->mode_rb, d->lib_rb, d->seq_rb,
+				  d->odc_rb, d->status_rb, d->armed);
+		}
+
+		{	/*
+			 * T1 / G-8 — WHICH CLOCK FEEDS DWT->CYCCNT.
+			 *
+			 * cyc_per_ms is computed here rather than by hand from
+			 * two heartbeat lines, so the answer cannot be an
+			 * arithmetic slip at 1 a.m.
+			 *
+			 * PREDICTED 800000. Derived, not guessed, from
+			 * main.c:206-212 and :249-255 with HSI_VALUE = 64 MHz
+			 * (stm32n6xx_hal_conf.h:130):
+			 *   PLL1 = 64/PLLM 2 * PLLN 25 / P1 1 / P2 1 = 800 MHz
+			 *   CPUCLK  = IC1 <- PLL1 / divider 1 = 800 MHz
+			 *   sysb_ck = IC2 <- PLL1 / divider 2 = 400 MHz
+			 * DWT->CYCCNT counts the PROCESSOR clock, i.e. CPUCLK.
+			 * The 400 MHz the board prints as "sysclk" is IC2, a
+			 * DIFFERENT clock tree, and is correct for what it is.
+			 * CLAUDE.md §3's /600000 is wrong by 800/600 = 1.333x.
+			 *
+			 * WRAP: CYCCNT is 32-bit, so it wraps every 2^32/800e6
+			 * = 5.37 s. HEARTBEAT_PERIOD_MS is 1000, so the UW
+			 * subtraction below is wrap-safe. IF THE HEARTBEAT
+			 * PERIOD IS EVER RAISED ABOVE ~5 s THIS NUMBER SILENTLY
+			 * BECOMES GARBAGE.
+			 */
+			UW cyc  = DWT->CYCCNT;
+			UW dms  = tim.lo - hb_prev_ms;
+			UW cpms = (dms != 0u) ? ((cyc - hb_prev_cyc) / dms) : 0u;
+
+			tm_printf((UB *)"[DWT] ok=%u cyc=%u cyc_per_ms=%u\n",
+				  dwt_ok, cyc, cpms);
+
+			hb_prev_cyc = cyc;
+			hb_prev_ms  = tim.lo;
 		}
 
 #ifdef DEBUG_TIMING
@@ -468,16 +513,47 @@ static void app_gpio_init(void)
 	HAL_GPIO_Init(GPIOD, &gpio_init);
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_6, GPIO_PIN_RESET);
 
-	/* DWT cycle counter enable. CAVEAT (Phase 4 design §5.2, UNVERIFIED on
-	 * this TrustZone/FSBL configuration): sequence below is the standard
-	 * CMSIS one (DEMCR.TRCENA then CTRL.CYCCNTENA; ARMv8-M has no DWT LAR).
-	 * The reference app used DEMCR.TRCENA alone (app.c ~1048). VERIFY the
-	 * counter actually advances before trusting any DWT number — the
-	 * GPIO/LA method is the primary evidence, DWT is corroboration only. */
+#endif	/* DEBUG_TIMING */
+
+	/*
+	 * DWT CYCLE COUNTER — ENABLED UNCONDITIONALLY (T1, 2026-08-30).
+	 *
+	 * These three lines were inside #ifdef DEBUG_TIMING, which is NOT
+	 * defined in this build. So outside the Phase 4 campaign DWT->CYCCNT
+	 * has never run, and dwt_spin_cycles() — which T2 needs for the
+	 * DRV2605L trigger pulse — could not work. Leaving the counter on
+	 * costs nothing; it is a free-running counter with no interrupt.
+	 *
+	 * CoreDebug / CoreDebug_DEMCR_TRCENA_Msk are marked \deprecated in
+	 * this CMSIS (core_cm55.h:3194, 3620) in favour of DCB /
+	 * DCB_DEMCR_TRCENA_Msk. Both name the same register; the deprecated
+	 * spelling is kept DELIBERATELY because it is the exact sequence that
+	 * produced the Phase 4 RZ3 evidence and this build is frozen 18 Sep.
+	 *
+	 * LOUD FAILURE CHECK, replacing the old "VERIFY it advances" comment:
+	 *   - NOCYCCNT (core_cm55.h:1314) reads 1 when the cycle counter is
+	 *     NOT IMPLEMENTED on this part.
+	 *   - A counter that reads the same value twice after CYCCNTENA is set
+	 *     means the enable was REJECTED. Prime suspect on this target is
+	 *     secure non-invasive debug being disabled under TZEN — the FSBL
+	 *     owns that, not us.
+	 * Either way dwt_ok goes to 0 and the heartbeat says so, instead of
+	 * the firmware printing plausible zeros for ever.
+	 */
 	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
 	DWT->CYCCNT = 0;
 	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-#endif
+
+	if ((DWT->CTRL & DWT_CTRL_NOCYCCNT_Msk) != 0u) {
+		dwt_ok = 0u;		/* cycle counter not implemented */
+	} else {
+		UW c0, c1;
+		c0 = DWT->CYCCNT;
+		__NOP(); __NOP(); __NOP(); __NOP();
+		__NOP(); __NOP(); __NOP(); __NOP();
+		c1 = DWT->CYCCNT;
+		dwt_ok = (c1 != c0) ? 1u : 0u;
+	}
 }
 
 /*

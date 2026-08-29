@@ -32,7 +32,8 @@ typedef struct {
 	UW	gate_whoami;	/* WHO_AM_I byte read by the gate test    */
 	UW	gate_addr;	/* 7-bit address that answered (AD0 q.)   */
 	UW	clk_pclk1_hz;	/* logged at init — design §6 verification */
-	UW	clk_sysclk_hz;	/* logged at init — design §6 verification */
+	UW	clk_sysclk_hz;	/* IC2 sysb_ck — NOT the CPU clock         */
+	UW	clk_cpu_hz;	/* IC1 CPUCLK — this is what DWT counts    */
 } app_i2c_stats_t;
 
 /* Init I2C1 + GPDMA + kernel IRQ registration. TK_PRI 3 context only. */

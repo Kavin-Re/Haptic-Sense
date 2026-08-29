@@ -247,7 +247,18 @@ ER app_i2c_init(void)
 
 	/* --- clock logging (design §6 verification items, incl. DWT question) --- */
 	stats.clk_pclk1_hz  = HAL_RCC_GetPCLK1Freq();
+	/*
+	 * TWO DIFFERENT CLOCK TREES (T1 / G-8, 2026-08-30). On the N6 these
+	 * are not the same number and never were:
+	 *   HAL_RCC_GetSysClockFreq() -> sysb_ck, from IC2 (hal_rcc.c:1440)
+	 *   HAL_RCC_GetCpuClockFreq() -> CPUCLK,  from IC1 (hal_rcc.c:1351)
+	 * main.c:251-255 feeds both from PLL1 with dividers 1 and 2, so
+	 * CPUCLK is exactly 2x sysb_ck. The project logged only sysb_ck and
+	 * then compared its 400 MHz against a CPU figure — two different
+	 * domains. DWT->CYCCNT counts CPUCLK. Log both.
+	 */
 	stats.clk_sysclk_hz = HAL_RCC_GetSysClockFreq();
+	stats.clk_cpu_hz    = HAL_RCC_GetCpuClockFreq();
 
 	/* --- MSP + peripheral init --- */
 	i2c1_msp_init();

@@ -208,6 +208,14 @@ ER drv2605l_init(void)
 	err = drv_rd8(DRV_REG_STATUS, &v);
 	if (err != E_OK)
 		goto done;
+	/* Keep the WHOLE byte. STATUS bit 3 DIAG_RESULT, bit 1 OVER_TEMP and
+	 * bit 0 OC_DETECT are latching fault flags that CLEAR ON READ
+	 * (SLOS854D Table 4, verbatim: "This bit clears upon read"). Masking
+	 * them off at the only place the register is read means an
+	 * overcurrent or overtemperature event can never be reported by this
+	 * firmware -- it would present as a weak or silent motor with
+	 * armed=1 and no error anywhere. Same failure class as RZ9. */
+	dstats.status_rb = (UW)v;
 	dstats.device_id = (UW)(v >> 5);		/* bits 7:5, NOT v & 0x07 */
 	if (dstats.device_id != DRV_DEVICE_ID_L) {
 		err = E_NOEXS;
@@ -245,9 +253,31 @@ ER drv2605l_init(void)
 		goto done;
 	dstats.seq_rb = v;
 
+	/* OD_CLAMP is the THIRD register that actually differs from reset, and
+	 * until 2026-08-30 it was written and never checked while WAVSEQ1 --
+	 * whose expected value 0x01 IS its reset value (Table 3) -- stood in
+	 * the pass condition in its place. A readback of WAVSEQ1 cannot
+	 * distinguish "my write landed" from "the part reset", which is what
+	 * the comment above this table already says; the code disagreed with
+	 * its own comment. 0x8B is neither the 0x8C reset value nor the 0xA5
+	 * sentinel, so this readback discriminates all three states. */
+	err = drv_rd8(DRV_REG_ODCLAMP, &v);
+	if (err != E_OK)
+		goto done;
+	dstats.odc_rb = v;
+
+	/* PASS CONDITION -- only registers whose expected value differs from
+	 * BOTH the reset value and DRV_SENTINEL may appear here.
+	 *   0x01 MODE     0x40 -> 0x01   discriminates
+	 *   0x03 LIBRARY  0x01 -> 0x02   discriminates (mask 0x07, HI_Z is b4)
+	 *   0x17 OD_CLAMP 0x8C -> 0x8B   discriminates
+	 * seq_rb is deliberately NOT here: (seq_rb & 0x7F) == 0 is false for
+	 * the 0xA5 sentinel (0x25) AND for the 0x01 reset value, so it passes
+	 * in every failure mode it was supposed to catch. It stays as printed
+	 * observability only. */
 	if (dstats.mode_rb != DRV_MODE_EDGE_TRIG ||
 	    (dstats.lib_rb & 0x07u) != DRV_LIBRARY_B ||
-	    (dstats.seq_rb & 0x7Fu) == 0u) {
+	    dstats.odc_rb != 0x8Bu) {
 		err = E_OBJ;		/* transfers fine, device not configured */
 		goto done;
 	}

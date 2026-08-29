@@ -55,6 +55,8 @@ typedef struct {
 	UW	mode_rb;	/* 0x01 readback, expect 0x01               */
 	UW	lib_rb;		/* 0x03 readback, expect 0x02 (Library B)   */
 	UW	seq_rb;		/* 0x04 readback, expect 0x01 (effect 1)    */
+	UW	odc_rb;		/* 0x17 readback, expect 0x8B (reset 0x8C)  */
+	UW	status_rb;	/* 0x00 raw byte; bit1 OVER_TEMP, bit0 OC   */
 	UW	armed;		/* 1 once the readback check passed         */
 } drv2605l_stats_t;
 
