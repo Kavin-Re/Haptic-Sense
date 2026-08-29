@@ -21,6 +21,7 @@ Developer: solo BTech student, **zero prior experience** in RTOS, ML training, F
 - NeuralART define: `#define LL_ATON_PLATFORM LL_ATON_PLAT_STM32N6`
 - Debug UART: USART1, PE5 (TX) / PE6 (RX), STLINK VCP, 115200 baud
 - POWER: with camera module attached, Type-A→C USB cannot power the board (~550 mA limit, boot failure). Use C-to-C cable or powered source.
+  - **MEASURED 2026-08-30: a Type-A-to-C cable DOES boot and run this board in the current configuration** — camera FFC unplugged, one DRV2605L, ERM pulsing, no NPU. The blanket claim "an A-to-C will not boot it" is FALSE for this build; the UM3300 §6.1 ~550 mA limit is real but the camera module is what exceeds it. **Still ship a C-to-C** for margin — the VL53L1X, the MPU6050 and the NPU are not on the rail yet. **The A-to-C case under NPU load is untested and must not be assumed.**
 
 ## 2. HARDWARE MAP (LOCKED — schematic-verified MB1939 rev, Nov 2024)
 
@@ -234,12 +235,15 @@ Fallback BSP: official tron-forum/mtk3_bsp2 **v1.00.04 (May 2026) officially sup
 - H-D3: effect duration (sets min inter-pulse period) — logic analyzer pending.
 - H-D4: library choice (B assumed) — measure rise/brake vs Table 1, pending.
 - H-D5: breakout VDD rail — measurement attempted July 10, inconclusive (unstable meter reading, likely breadboard contact); assume 3.3V, remeasure pending.
-- H-D6: ERM coil resistance vs 4Ω OC threshold — PROVISIONALLY CLEARED: estimated 25–37.5Ω from vendor rated V/I (3V / 80–120mA); direct multimeter measurement still pending [source: vendor spec sheet, ERM coin type 3VDC 80–120mA].
+- **H-D6 / V-W-6: CLOSED 2026-08-30 — ERM coil measured 32.5 Ω** by multimeter, motor disconnected from everything. Clears the SLOS854D §6.3 `ZL` min 8 Ω (at VDD = 5.2 V, "ensured by design, not production tested") with 4× margin, and sits inside the 25–37.5 Ω predicted from the vendor rated V/I (3 V / 80–120 mA). The motor is legal on this driver.
 - H-D7: DEV_RESET self-clear time — instrument on first hardware run.
 - H-D8: I2C1 SCL ≤ 400 kHz with DRV2605L on shared bus — **CLOSED 2026-08-29.** SLOS854D §6.7 Switching Characteristics: `f(SCL)` max **400 kHz** with no wait states. `I2C_BUS_HZ 400000` (`app_i2c.h:15`) is legal; measured working at pclk1 = 200 MHz.
 - H-D6 addendum: SLOS854D §6.3 gives `ZL` min **8 Ω at VDD = 5.2 V**, footnoted "ensured by design, not production tested" — quote the condition, not a bare 8 Ω. Direct measurement (V-W-6) still owed before any motor is connected.
 - **H-D9 (new, 2026-08-29): DRV2605L register access CONFIRMED on hardware.** STATUS 0xE0 / MODE 0x40 / LIBRARY_SEL 0x01 read back over I2C1 DMA from the SmartElex board. **Write direction CLOSED 2026-08-30.** `drv2605l_write_probe()` (`app_i2c.c`) reads 0x02 RTP_INPUT, writes 0x27, reads it back, restores the original and verifies the restore — two independent writes, `wr=0 wrseen=0x27 ok=9 err=0 recov=0` on hardware. `hdma_i2c1_tx` has now moved bytes. The full L1 primitive (`i2c_rd` AND `i2c_wr`, DMA both directions) is proven.
 - **H-D10 CLOSED 2026-08-30. EN is driven by PE7 (D8, CN12 pin 1).** Bench jumper removed. Register access unchanged across the move: `whoami=0x140e0 wr=0 wrseen=0x27 ok=9 err=0 recov=0`. PE7 is init-only (`drv2605l_power_up()`, TK_PRI 3) per R-1; the hazard pattern moved to PE13. **Block 0 COMPLETE.**
+- **H-D2 (EN-rise state ambiguity) — MECHANISM RESOLVED 2026-08-30.** The DRV2605L **retains its register configuration across an MCU reset but loses it across a true power cycle.** Evidence, both from `app_i2c_gate_test()`, which runs BEFORE any config write: after a reflash (VDD maintained) it packed `whoami=0x0201E0` — MODE 0x01, LIBRARY 0x02, the *configured* values; after USB power was removed to do the T3 wiring it packed `whoami=0x0140E0` — 0x40 / 0x01, the Table 3 reset values. **Retention is because VDD never dropped, not because of anything EN did.** Consequence: a readback cannot by itself prove that *this* boot's writes landed, which is why `drv2605l_init()` issues **DEV_RESET first and confirms MODE reads 0x40** before configuring.
+- **H-D7: CLOSED 2026-08-30 — DEV_RESET self-clears in under one kernel tick (< 2 ms).** Measured as `rst=1`: the bit had already cleared at the first poll, taken after a single `tk_dly_tsk(1)`. `rstmode=0x40` confirms defaults were restored.
+- **HAPTIC CHAIN LIVE 2026-08-30 — first physical haptic output in the project.** Synthetic hazard → `drv2605l_trig_fire()` 2 µs edge on PE13 (CN11 pin 7) → DRV2605L → ERM buzz. Two pulses per 6.6 s hazard burst at the interim 125 ms R-3 floor. Over 280 hazard events: `pulses + suppressed == hazard` exactly, `faults=0x0`, `cfglost=0`, `err=0 tmo=0 recov=0`, `canary_err=0`, 47.6 Hz — identical to the Phase 4 frame rate. **H-D3 (effect duration) is the last open item before the R-3 floor can leave its interim value.**
 
 ## 9. HOW TO BEHAVE (Claude Code)
 

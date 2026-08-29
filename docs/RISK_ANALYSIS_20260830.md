@@ -127,9 +127,19 @@ now** and it involves no soldering.
 
 ## TIER 3 — worth knowing, unlikely to be fatal
 
-- **G-10. The judge's cable.** Type-A-to-C limits the board to ~550 mA and it will not boot
-  (UM3300 §6.1 note 1). A C-to-C goes in the box, and the printed card says so. *(evidence)*
-  Also worth testing the demo on a deliberately marginal supply before packing. *(speculation)*
+- **G-10. The judge's cable.** *(REVISED 2026-08-30 after measurement.)* UM3300 §6.1 note 1's
+  ~550 mA Type-A-to-C limit is real, but **the board demonstrably boots and runs the full haptic
+  demo on an A-to-C cable** with the camera FFC unplugged, one DRV2605L and the ERM pulsing. The
+  unconditional "it will not boot" was wrong — CLAUDE.md §1 always conditioned that on the camera
+  module, and this project never attaches the camera; the risk doc had promoted a conditional
+  claim to an absolute one. *(evidence)*
+  **A C-to-C still goes in the box** for margin: the VL53L1X, the MPU6050 and the NPU are not on
+  the rail yet, and the A-to-C case under NPU load is untested. **But the printed card must not
+  predict an A-to-C failure** — a judge who tries one and finds it boots has been handed a reason
+  to distrust everything else on the card. Word it "use the supplied C-to-C cable", not as a
+  failure prediction. *(inference)*
+  Re-test on a deliberately marginal supply once the full sensor load and the NPU are on the rail,
+  before packing. *(speculation)*
 - **G-11. Ambient IR.** VL53L1X range degrades in strong ambient infrared. The demo room's
   lighting is unknown. One line on the card about expected working distance. *(inference)*
 - **G-12. I2C IRQs share NVIC level 1 with SysTick.** They cannot preempt each other, so a long
