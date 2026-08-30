@@ -73,10 +73,22 @@ back-to-back transactions in 58 ms within 20 s of boot.
   is discarded — see `docs/BUS2_SCL_FREQUENCY_20260830.md` §5) and re-capture.
 Archive the `.sr` either way.
 
-### B2 — Cheap bench measurements while the board is out
-**V-W-1** CN8 pin 4 → pin 7, expect 3.25–3.35 V (CubeProgrammer's 3.29 V is the ST-LINK's own
-sense, not your rail). **V-W-7** VOL on SDA/SCL under traffic, as a baseline before the bus
-gets crowded. **H-D5** breakout VDD rail, inconclusive since July.
+### B2 — Bench checks before soldering anything, RE-RANKED 2026-08-30
+- **Read the pull-up markings on the 7SEMI VL53L1X and the GY-521, and check for a jumper or
+  solder bridge to disconnect them.** Highest value of anything in this group and it takes two
+  minutes. CLAUDE.md §2's budget counts only SmartElex boards; adding these two puts the bus at
+  559–697 Ω with the SmartElex jumper closed, which is over the 3 mA I2C budget and in three of
+  four cases below the DRV2605L's own 660 Ω minimum. Opening one jumper may not be enough.
+- **V-W-1** CN8 pin 4 → pin 7, expect 3.25–3.35 V. 60 seconds, worth having as a reference
+  number, but it will not find anything — the rail demonstrably works. The failure mode that
+  matters is sag under the ERM transient, which a DMM cannot see.
+- **V-W-7 CANNOT BE DONE WITH A MULTIMETER.** VOL is the level during the ~1.3 µs low phase of
+  a bus that is idle-high more than 99.9% of the time (two transactions per second). A DMM
+  averages and will read close to VDD. It is a scope measurement — do it in lab, or rely on the
+  pull-up arithmetic above, which is the thing the measurement was standing in for.
+- **H-D5** breakout VDD — **defer past Block 5.** It measures breadboard contact quality on a
+  breadboard that gets replaced by protoboard on 7–9 Sep. Re-open it after the rebuild, where
+  the answer will still be true.
 
 ### B3 — Block 2, VL53L1X (plan v2, 1–4 Sep) ← highest technical risk
 Fix the `firmware/Lib/` vs `firmware/Appli/Lib/` duplicate-tree split first. Then the ULD

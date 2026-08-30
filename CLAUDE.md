@@ -38,7 +38,18 @@ Developer: solo BTech student, **zero prior experience** in RTOS, ML training, F
 
 **The Adafruit board does NOT break out EN** — its pin set is VIN, GND, SCL, SDA, STEMMA QT, Motor±, INT, power-LED jumper [learn.adafruit.com DRV2605L pinouts, fetched 2026-08-29]. TI requires EN high for register access (§8.4.1.3), so the Adafruit unit must have EN tied high on-board and is therefore **permanently enabled** — it cannot take part in EN-arbitrated sequential init and will collide at 0x5A. **SmartElex is primary.** SmartElex silkscreen order, mounting-hole end first: **GND · VCC · SDA · SCL · IN · EN**, motor pads O−/O+ on the opposite edge [board photo 2026-08-29]. **IN and EN are adjacent — trivially swapped; label the wires.** Silkscreen is on the top face and the header pins on the bottom, so flipping the board reverses left-to-right; use the mounting hole as the landmark from either side.
 
-SmartElex I2C pull-ups are **2.2 kΩ ("222") with an `I2C-PU` jumper**. Budget against the 1.5 kΩ onboard pair: board alone 1500 Ω / 2.2 mA; +1 SmartElex 892 Ω / 3.7 mA (over the 3 mA I2C budget but tolerable — VOL only has to stay under VIL = 0.99 V); +2 SmartElex 634 Ω / 5.2 mA — **not acceptable**. **Open the I2C-PU jumper on at least one SmartElex before the full bus is assembled.** Rise time is never the problem here: 892 Ω × ~100 pF ⇒ tr ≈ 76 ns, well inside the 300 ns fast-mode limit.
+SmartElex I2C pull-ups are **2.2 kΩ ("222") with an `I2C-PU` jumper**. Budget against the 1.5 kΩ onboard pair: board alone 1500 Ω / 2.2 mA; +1 SmartElex 892 Ω / 3.7 mA (over the 3 mA I2C budget but tolerable — VOL only has to stay under VIL = 0.99 V); +2 SmartElex 634 Ω / 5.2 mA — **not acceptable**. **Open the I2C-PU jumper on at least one SmartElex before the full bus is assembled.** Rise time is never the problem here: 892 Ω × ~100 pF ⇒ tr ≈ 76 ns, well inside the 300 ns fast-mode limit — **confirmed by measurement 2026-08-30**, real edge time ~100 ns (H-D8).
+
+**THIS BUDGET IS INCOMPLETE — flagged 2026-08-30.** It counts only SmartElex boards. **The 7SEMI VL53L1X breakout and the GY-521 each carry their own I2C pull-ups, and both go onto this same bus in Blocks 2 and 3.** Their values have never been read off the boards. Parametric result, with 1.5 kΩ board + 2.2 kΩ SmartElex known and the other two swept over plausible values:
+
+| bus | R_pu | I at VOL 0.4 V | |
+|---|---|---|---|
+| board only | 1500 Ω | 1.93 mA | ok |
+| + SmartElex (today) | 892 Ω | 3.25 mA | over 3 mA |
+| + both breakouts, jumper CLOSED | 559–697 Ω | 4.2–5.2 mA | over 3 mA; three of four cases **below the DRV2605L's 660 Ω minimum** (SLOS854D §8.5.3.1) |
+| + both breakouts, jumper OPEN | 750–1021 Ω | 2.8–3.9 mA | **only the 10 kΩ / 4.7 kΩ case is clean** |
+
+So the single mitigation already in the plan (open one SmartElex jumper) is **necessary but may not be sufficient**, and which it is depends on two resistor values nobody has read. **ACTION, before soldering either breakout: read the pull-up markings on the 7SEMI and the GY-521, check whether either board has a jumper or solder bridge to disconnect them, and redo this table with the real numbers.** Two minutes with a magnifier, and it decides whether more than one set of pull-ups has to come off.
 
 **EN low ≠ absent.** §8.4.1.3: with EN low the device still ACKs its address but no register read or write is possible. So an address ACK proves the bus and the joints; only a successful **register read** proves EN. STATUS (0x00) reset value is **0xE0**, DEVICE_ID bits 7:5 = **7** for the DRV2605L (§8.6.1 Table 4). **7, not 3 — 3 is the non-L DRV2605.**
 
