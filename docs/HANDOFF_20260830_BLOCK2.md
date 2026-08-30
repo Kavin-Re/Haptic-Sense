@@ -1,4 +1,8 @@
 # HAPTIC-SENSE — HANDOFF INTO BLOCK 2
+
+> **SUPERSEDED by `docs/HANDOFF_20260831_BLOCK2.md`.** Twelve commits landed after this
+> was written (H-D8 found and fixed, the pull-up budget redone from measurement, an OC_DETECT
+> fault, a 10-minute soak, and the ULD shim). Kept for the record; do not work from it.
 **Written 2026-08-30 ~07:20 UTC at the end of the Block 1 session.**
 Read `CLAUDE.md` first. Plan: `docs/PLAN_TO_SUBMISSION_20260830.md` (v2).
 Risks: `docs/RISK_ANALYSIS_20260830.md`. This session: `docs/PHASE5_T0_T1_REVIEW_20260830.md`,
