@@ -113,3 +113,56 @@ plausible enough that a later session could waste an hour on it.
 
 **The 100 µF is still owed regardless** (T3 step 5, confirmed absent by bench photo). It played
 no part in this fault, but it belongs on the rail before the VL53L1X and MPU6050 join it.
+
+---
+
+## 8. TEN-MINUTE CONFIRMATION SOAK — PASS
+
+`docs/evidence/phase5/soak_10min_20260830.log`, verdict by
+`docs/evidence/phase5/check_soak.py`.
+
+```
+570 heartbeats over 595.5 s (9.9 min), up_ms 4471 -> 600010
+effect duration   58539 - 58760 us   R-3 floor 75 ms = 1.276x the max
+cyc_per_ms        796514 - 800136  (median 799999)
+pulses            4 -> 269     frame rate 47.6 Hz
+```
+
+All fourteen checks pass: `faults` 0x0 throughout, `cfglost` 0, I2C `err`/`tmo`/`recov` 0,
+`canary_err` 0, `frames == inf` on all 570 lines, `qovr` 0, DRV config nominal on every line,
+`rstmode` 0x40, HAP-T9 `late`/`stuck` 0, DWT live, CPUCLK median 799999, trigger accounting
+within 2 of `hazard`.
+
+**The motor fired 265 times with no fault.** The joint repair holds.
+
+## 9. What the soak also revealed: board time is HSI-referenced *(inference)*
+
+Not a fault, recorded so it is never misquoted.
+
+The capture ran exactly 600 s of wall clock under `timeout`, and the board reported 595.5 s of
+`up_ms` across the same window. Allowing for the capture boundaries (the first heartbeat arrives
+up to one ~1.045 s period after the start), **board time runs 0.57–0.75% slow against the PC's
+clock.**
+
+The cause is by design: `main.c:205` sets `OscillatorType = RCC_OSCILLATORTYPE_NONE` and all four
+PLLs take `RCC_PLLSOURCE_HSI`. **There is no crystal in this timing chain — everything derives
+from the internal HSI RC oscillator**, and sub-1% deviation is what an RC oscillator does.
+
+Two consequences that matter for the write-up:
+
+1. **`cyc_per_ms = 800000` is a RATIO, not an absolute frequency measurement.** `DWT->CYCCNT`
+   (HSI → PLL1 → IC1) is divided by `up_ms` (HSI → SysTick). Both numerators and denominators
+   descend from the same HSI, so the ratio is exact by construction and would still read 800000
+   if HSI were off by 1%. It correctly establishes **CPUCLK/tick = 800000**, which is all it was
+   ever used for — converting cycles to milliseconds of board time. It is **not** evidence that
+   CPUCLK is 800.000 MHz in absolute terms.
+2. **The contest latency claim is unaffected.** The 3.375 µs worst case is a *logic-analyzer*
+   measurement with its own timebase, not a DWT figure. Only DWT-derived numbers inherit HSI's
+   absolute accuracy, and those were always documented as corroboration.
+
+Everything else scales harmlessly: 47.6 Hz board time is ~47.3 Hz wall; the 75 ms R-3 floor is
+~75.5 ms real; the 58.7 ms effect is ~59.1 ms real, still mid-band against Table 1's 45–75 ms.
+
+**Owed before any absolute timing claim:** look up the HSI accuracy specification in the
+STM32N657 datasheet and record it. `[UNVERIFIED]` — the 0.57–0.75% here is one observation
+against one PC clock, not a characterisation.
