@@ -146,3 +146,50 @@ against a second device whose limit is also 400 kHz.
 Decision rule once the capture exists:
 - **period ≥ 2500 ns (≤ 400 kHz)** → H-D8 genuinely closes, no change, record the number.
 - **period < 2500 ns** → apply §5's `.freq` change and re-capture to confirm.
+
+---
+
+## 8. RESULT — measured, fixed, re-measured. H-D8 CLOSED. *(evidence)*
+
+Both captures: `sigrok-cli --driver fx2lafw --config samplerate=8m --time 5s`, SCL on **D2**
+(the pin silkscreened **CH3** — these clones label CH1–CH8 while the driver names the same
+lines D0–D7), SDA on D3, ground to CN8 pin 7. Analysed with
+`docs/evidence/phase5/analyze_scl.py`.
+
+| | before · `.freq = 400000` | after · `.freq = 350000` |
+|---|---|---|
+| capture | `bus2_scl_20260830.sr` | `bus2_scl_20260830_fixed.sr` |
+| SCL rising edges | 380 | 304 |
+| in-byte periods | 360 | 288 |
+| **minimum period** | **2250 ns** | **2500 ns** |
+| median period | 2250 ns | **2625 ns** |
+| mean period | 2285 ns | 2644 ns |
+| median frequency | **444.4 kHz** | **381.0 kHz** |
+| verdict | **FAIL — 11% over** | **PASS** |
+
+**The compliance statement is the minimum, not the median: after the fix, not one of 288
+measured periods fell below 2500 ns.** Before the fix, not one rose above it.
+
+**Read the minimum correctly.** `min = 2500.0 ns` is exactly 20 samples at 125 ns
+quantisation; the true period is ~2605 ns and lands on 20 or 21 samples depending on where the
+edges fall relative to the sample clock. It is **not** a real excursion to 400.0 kHz, and the
+"SCL freq max 400.0 kHz" line the tool prints must not be quoted as though the bus touches the
+limit. The honest single figure is the median, 2625 ns / 381 kHz, with the true value bounded
+below at 2500 ns by direct observation.
+
+**The prediction held.** §3 predicted 2246 ns from a *computed* rise time; the measurement
+returned 2250 ns. That also confirms CLAUDE.md §2's `tr ≈ 76 ns`, which had never been
+measured — real edge time comes out at 2250 − 2150 = **~100 ns** against the 350 ns the ST
+table assumes.
+
+**Decoder cross-check**, same capture file:
+```
+i2c-1: Address write: 5A / Data write: 00 → Address read: 5A / Data read: E0
+i2c-1: Address write: 5A / Data write: 01 → Address read: 5A / Data read: 01
+```
+STATUS = 0xE0, MODE = 0x01 from 0x5A — that is `drv2605l_poll()` on the wire, which confirms
+the probe was on the right bus and that the runtime health poll does what it claims.
+
+**Optional refinement, not required.** A 24 MHz capture would give 41.7 ns resolution and pin
+the period to ~2605 ± 42 ns instead of bounding it. The 8 MHz data already proves compliance,
+and 8 MHz is the rate the Phase 4 runbook established as drop-free on this clone.
