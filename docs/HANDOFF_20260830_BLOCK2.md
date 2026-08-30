@@ -91,9 +91,26 @@ Archive the `.sr` either way.
   the answer will still be true.
 
 ### B3 — Block 2, VL53L1X (plan v2, 1–4 Sep) ← highest technical risk
-Fix the `firmware/Lib/` vs `firmware/Appli/Lib/` duplicate-tree split first. Then the ULD
-platform shim — nine bodies currently `return 255`, already compiled in. Two lines carry the
-risk: `dev7 = dev >> 1`, and `I2C_REG16` **as the symbol, never the literal 2**.
+
+**THE BUILD-TREE FIX IS NOT NEEDED — checked 2026-08-30, plan v2 Block 2 step 10 is wrong.**
+It says "`firmware/Lib/` and `firmware/Appli/Lib/` are two real duplicate trees, the build uses
+the former, the ULD lives in the latter." The build uses **both, correctly**:
+`Appli/Debug/.../subdir.mk` compiles `../Lib/STSW-IMG009/...` (= `Appli/Lib/`, where the ULD is)
+and includes `-I../../Lib/screenl/Inc` etc. (= `firmware/Lib/`, where the reference libraries
+are). `firmware/Lib/` has no `STSW-IMG009` at all, and `Appli/Lib/`'s other directories are
+**empty shells** — same names, zero files. Nothing is duplicated; the empty shells just make it
+look that way. **Confirmed compiled:** `Appli/Debug/Lib/STSW-IMG009/.../vl53l1_platform.o`
+exists from the 29 Aug build, so the `return 255` stub is already linked in — dead today
+because nothing calls it, live the moment L2 does.
+
+Real work, then: **replace the ULD platform shim.** Nine bodies in
+`Appli/Lib/STSW-IMG009/STSW-IMG009_v3.5.5/API/platform/vl53l1_platform.c`, all returning 255:
+`WriteMulti · ReadMulti · WrByte · WrWord · WrDWord · RdByte · RdWord · RdDWord · WaitMs`.
+Write a fresh Apache-2.0 file rather than filling ST's in place (license mixing). Two lines
+carry nearly all the risk: `dev7 = dev >> 1` (the ULD passes 8-bit 0x52; our primitive takes
+7-bit and re-shifts internally), and `I2C_REG16` **as the symbol, never the literal 2** — a
+literal falls silently to the 8-bit branch, the sensor still ACKs, every read is wrong, and
+nothing errors.
 
 ### B4 — Non-bench work, and it is overdue
 - **D1** — the two contest pages. Deadline, submission format, **whether entry registration

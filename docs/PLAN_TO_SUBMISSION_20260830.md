@@ -182,8 +182,11 @@ The bench is wired and working. Do not disturb it until these are done.
     - `I2C_REG16` **as the symbol, never the literal 2** — dispatch at `app_i2c.c:316` is symbolic;
       a literal falls silently to the 8-bit branch, the sensor still ACKs, every read is wrong, and
       nothing errors.
-    Fix the build split first: `firmware/Lib/` and `firmware/Appli/Lib/` are two real duplicate
-    trees, the build uses the former, the ULD lives in the latter.
+    ~~Fix the build split first: `firmware/Lib/` and `firmware/Appli/Lib/` are two real duplicate
+    trees, the build uses the former, the ULD lives in the latter.~~ **WRONG — struck 2026-08-30.**
+    The build uses both correctly: `Appli/Lib/` for the ULD (which is the only real thing in it;
+    the rest are empty shells) and `firmware/Lib/` for the reference libraries. `vl53l1_platform.o`
+    is already in `Appli/Debug/`. **There is nothing to fix — skip this step.**
 11. **L1 raw probe, before any shim code runs:** `i2c_rd(0x29, 0x010F, I2C_REG16, buf, 1)`, expect
     `0xEA`. **First 16-bit-addressed transfer in the project's history.** One variable at a time.
 12. L2 `BootState` → L3 `GetSensorId` (**log, don't hard-fail**: 0xEACC per UM2510 vs 0xEEAC in the
