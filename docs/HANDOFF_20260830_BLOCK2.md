@@ -103,7 +103,37 @@ look that way. **Confirmed compiled:** `Appli/Debug/Lib/STSW-IMG009/.../vl53l1_p
 exists from the 29 Aug build, so the `return 255` stub is already linked in — dead today
 because nothing calls it, live the moment L2 does.
 
-Real work, then: **replace the ULD platform shim.** Nine bodies in
+**THE SHIM IS WRITTEN — `firmware/Appli/Core/Src/app_vl53l1_port.c` (+ `.h`), Apache-2.0,
+committed but NOT YET COMPILED.** ST's stub is renamed to `vl53l1_platform.c.ST_STUB_UNUSED`
+so it stops being linked in as dead code; a README beside it explains why and what to do if
+the build complains either way. **First build after this needs F5** so `subdir.mk` regenerates
+and picks up the new file / drops the old one.
+
+Three guards were built into it, one per danger:
+1. **Parity check on `dev`.** An 8-bit I2C address is always even (bit 0 is R/W). The correct
+   0x52 is even; the 7-bit 0x29 someone would wrongly pass instead is odd. An odd `dev` is
+   rejected outright, so the exact confusion this shim exists to get right cannot pass silently.
+2. **`_Static_assert(I2C_REG16 != I2C_REG8)`** — the build refuses if those two ever collide.
+   Every bus call passes the symbol; there is no literal `2` in the file.
+3. **One aligned file-static bounce buffer** (F-6b), sized 32 from the ULD's real worst case —
+   `VL53L1X_api.c:593` reads 17 bytes and nothing else exceeds 4. Oversized counts are REFUSED,
+   not truncated, and `max_count` in the stats reports the headroom actually used. Reads
+   pre-fill with the 0xA5 sentinel, the rule that surfaced the GPDMA defect.
+
+Also carries a stats block (`vl53l1_port_stats()`): the ULD collapses every failure into one
+`int8_t` and ORs them across dozens of calls, so a status reaching the app says only "something
+went wrong in the last 91 writes". `last_er` and `last_index` name which transfer and why.
+
+**NOTICED WHILE WRITING IT, NOT FIXED — `mtkernel_bsp.c:31`.** That file hand-declares
+`extern void tk_dly_tsk(int32_t dlytim);` and its own `SYSTIM` struct, rather than including
+`tk/tkernel.h`. The real signature is `ER tk_dly_tsk(RELTIM)` — `ER` not `void`, `UW` not
+`int32_t`. It works by accident on AAPCS (same register width, discarded return) and has since
+Phase 3, but it is formally undefined behaviour and the compiler cannot check the call at
+`:58` inside `HAL_Delay`. **Deliberately left alone**: it is boot code that works, it is not on
+the Block 2 path, and 19 days from ship is the wrong time to touch it for a theoretical fault.
+Recorded so it is a known quantity rather than a surprise.
+
+What remains of Block 2's software: Nine bodies in
 `Appli/Lib/STSW-IMG009/STSW-IMG009_v3.5.5/API/platform/vl53l1_platform.c`, all returning 255:
 `WriteMulti · ReadMulti · WrByte · WrWord · WrDWord · RdByte · RdWord · RdDWord · WaitMs`.
 Write a fresh Apache-2.0 file rather than filling ST's in place (license mixing). Two lines
