@@ -40,16 +40,34 @@ Developer: solo BTech student, **zero prior experience** in RTOS, ML training, F
 
 SmartElex I2C pull-ups are **2.2 kΩ ("222") with an `I2C-PU` jumper**. Budget against the 1.5 kΩ onboard pair: board alone 1500 Ω / 2.2 mA; +1 SmartElex 892 Ω / 3.7 mA (over the 3 mA I2C budget but tolerable — VOL only has to stay under VIL = 0.99 V); +2 SmartElex 634 Ω / 5.2 mA — **not acceptable**. **Open the I2C-PU jumper on at least one SmartElex before the full bus is assembled.** Rise time is never the problem here: 892 Ω × ~100 pF ⇒ tr ≈ 76 ns, well inside the 300 ns fast-mode limit — **confirmed by measurement 2026-08-30**, real edge time ~100 ns (H-D8).
 
-**THIS BUDGET IS INCOMPLETE — flagged 2026-08-30.** It counts only SmartElex boards. **The 7SEMI VL53L1X breakout and the GY-521 each carry their own I2C pull-ups, and both go onto this same bus in Blocks 2 and 3.** Their values have never been read off the boards. Parametric result, with 1.5 kΩ board + 2.2 kΩ SmartElex known and the other two swept over plausible values:
+**BUDGET REDONE 2026-08-30 WITH MEASURED VALUES. The mitigation this file used to prescribe — "open the I2C-PU jumper on at least one SmartElex" — IS NOT SUFFICIENT.**
 
-| bus | R_pu | I at VOL 0.4 V | |
-|---|---|---|---|
-| board only | 1500 Ω | 1.93 mA | ok |
-| + SmartElex (today) | 892 Ω | 3.25 mA | over 3 mA |
-| + both breakouts, jumper CLOSED | 559–697 Ω | 4.2–5.2 mA | over 3 mA; three of four cases **below the DRV2605L's 660 Ω minimum** (SLOS854D §8.5.3.1) |
-| + both breakouts, jumper OPEN | 750–1021 Ω | 2.8–3.9 mA | **only the 10 kΩ / 4.7 kΩ case is clean** |
+Pull-ups measured with a DMM, each board disconnected (SDA↔SCL reads 2R; SDA↔supply reads R):
 
-So the single mitigation already in the plan (open one SmartElex jumper) is **necessary but may not be sufficient**, and which it is depends on two resistor values nobody has read. **ACTION, before soldering either breakout: read the pull-up markings on the 7SEMI and the GY-521, check whether either board has a jumper or solder bridge to disconnect them, and redo this table with the real numbers.** Two minutes with a magnifier, and it decides whether more than one set of pull-ups has to come off.
+| board | SDA↔SCL | SDA↔supply | ⇒ pull-up | tied to |
+|---|---|---|---|---|
+| 7SEMI VL53L1X | 19.8 kΩ | 9.9 kΩ (VIN) | **2 × 9.9 kΩ** | **VIN directly** |
+| GY-521 MPU6050 | 4.3 kΩ | **72.3 kΩ** (VCC) | **2 × 2.15 kΩ** | **the onboard LDO output, NOT VCC** |
+
+The GY-521's 72.3 kΩ to VCC is the reverse-leakage path through its regulator: its pull-ups sit on the regulated rail, so **they are live whenever the board is powered and there is no jumper to lift them.** Removing them means desoldering two resistors.
+
+**The binding constraint is the weakest DRIVER on the bus, and a device counts whether or not its own pull-ups are fitted:** MPU6050 **3 mA** (VOL 0–0.4 V at 3 mA sink, PS-MPU-6000A §6.5) vs DRV2605L **4 mA** (VOL 0.4 V at IOL 4 mA, SLOS854D §6.5) and VL53L1X **4 mA** (VOL 0.4 V at IOUT 4 mA, DS12385 Table 16). Required sink = (3.3 − 0.4)/R_pu.
+
+| configuration | R_pu | sink needed | limit | |
+|---|---|---|---|---|
+| today: board + SmartElex | 892 Ω | 3.25 mA | 4 mA | OK |
+| Block 2: + 7SEMI | 818 Ω | 3.54 mA | 4 mA | OK |
+| Block 3: all pull-ups fitted | 593 Ω | 4.89 mA | **3 mA** | **FAIL** |
+| Block 3: SmartElex jumper open only | 811 Ω | 3.58 mA | **3 mA** | **FAIL** |
+| Block 3: GY-521 resistors off only | 818 Ω | 3.54 mA | **3 mA** | **FAIL** |
+| Block 3: **both 2.2 kΩ pairs removed** | 1303 Ω | 2.23 mA | 3 mA | **OK** |
+| **IMU dropped, nothing modified** | 818 Ω | 3.54 mA | 4 mA | **OK** |
+
+**So: if the MPU6050 ships, BOTH 2.2 kΩ pairs must come off — the SmartElex jumper AND two desoldered resistors on the GY-521. Removing either alone leaves the MPU6050 sinking ~3.55 mA against a 3 mA spec.** If the IMU is dropped (risk register schedule valve #2), no pull-up modification is needed at all. **This is a new, independent argument for that valve and it was not available when the valve was written.**
+
+**VIL CORRECTION.** This file previously justified 892 Ω with "VOL only has to stay under VIL = 0.99 V". Wrong — 0.99 V is the generic 0.3 × VDD. **SLOS854D §6.3 gives the DRV2605L an absolute `VIL` max of 0.5 V on EN / IN-TRIG / SDA / SCL**, which is the tightest receiver threshold on this bus (VL53L1X 0.6 V, MPU6050 0.3 × VLOGIC = 0.99 V). Budget against 0.5 V, not 0.99 V.
+
+Good news from the same measurements: the 7SEMI's I2C pull-ups go to **VIN, not to its 2.8 V LDO**, and its `VIH` range is 1.12–3.5 V (DS12385 Table 16), so **3.3 V logic needs no level shifter** — a latent worry now closed. Rise time is confirmed by measurement, not just computed: real edge time ~100 ns (H-D8).
 
 **EN low ≠ absent.** §8.4.1.3: with EN low the device still ACKs its address but no register read or write is possible. So an address ACK proves the bus and the joints; only a successful **register read** proves EN. STATUS (0x00) reset value is **0xE0**, DEVICE_ID bits 7:5 = **7** for the DRV2605L (§8.6.1 Table 4). **7, not 3 — 3 is the non-L DRV2605.**
 
