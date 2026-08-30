@@ -99,18 +99,17 @@ single recurrence in that window will be visible.
 - **Do not solder the VL53L1X onto a bench with a known-intermittent motor lead.** Confirm the
   ten-minute clean run first.
 
-## 7. OPEN: unexplained USB disconnect
+## 7. CLOSED: the USB disconnects were manual unplugs
 
 Both long captures today ended with:
 ```
 FATAL: read zero bytes from port
 term_exitfunc: reset failed for dev UNKNOWN: Input/output error
 ```
-That is the USB device disappearing, not a picocom exit. **If it was not caused by unplugging
-the cable, it is a separate open fault.** A plausible chain exists and is worth stating so it is
-tested rather than assumed: ERM start transient (60–90 mA step) → sag on a 3V3 rail with **no
-bulk capacitance** → VCP glitch. That chain predicts the missing 100 µF is the fix.
+**Confirmed by the developer 2026-08-30: the cable was unplugged by hand both times.** Not a
+fault. Recorded because the message reads like one, and the hypothesis it would otherwise have
+triggered — ERM transient into a 3V3 rail with no bulk capacitance, glitching the VCP — is
+plausible enough that a later session could waste an hour on it.
 
-**Test:** fit the capacitor, then run ten minutes with the motor firing and see whether the port
-survives. If it drops with the capacitor fitted, the hypothesis is wrong and this needs its own
-investigation before Block 2. *(speculation — the disconnects may simply be manual unplugs.)*
+**The 100 µF is still owed regardless** (T3 step 5, confirmed absent by bench photo). It played
+no part in this fault, but it belongs on the rail before the VL53L1X and MPU6050 join it.
