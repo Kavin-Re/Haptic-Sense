@@ -12,7 +12,17 @@
 
 #include "tk/tkernel.h"
 
-#define I2C_BUS_HZ		400000u	/* Fast-mode target; 100 kHz fallback pre-approved */
+/*
+ * BUCKET SELECTOR, NOT A TARGET. I2C_GetTiming() compares this against each
+ * I2C_Charac[] entry's freq_min/freq_max to pick a speed class, then DISCARDS
+ * it and computes against that entry's own .freq. Any value in [320000,480000]
+ * produces a byte-identical TIMINGR. Changing this number does not change the
+ * bus clock -- the delivered frequency is set by
+ * I2C_Charac[I2C_SPEED_FREQ_FAST].freq in i2c_timing.c, currently 350000 for
+ * the reason documented there. Measured delivered clock: see
+ * docs/BUS2_SCL_FREQUENCY_20260830.md.
+ */
+#define I2C_BUS_HZ		400000u	/* selects the fast-mode bucket */
 #define I2C_XFER_TMO_MS		50	/* design §4.3: >10x slowest transfer, 2.5 frames  */
 
 /* Register-address size per device (HAL mem-address size codes) */

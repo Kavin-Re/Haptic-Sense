@@ -94,7 +94,41 @@ static const I2C_Charac_t I2C_Charac[] =
   },
   [I2C_SPEED_FREQ_FAST] =
   {
-    .freq = 400000,
+    /*
+     * LOCAL CHANGE 2026-08-30 (Haptic-Sense): .freq lowered 400000 -> 350000.
+     * This is the ONLY edit to this ST-derived table. Do not "restore" it.
+     *
+     * WHY. This algorithm computes its period as
+     *     tSCL = tSCL_L + tSCL_H + trise + tfall
+     * and hits the target exactly -- but only tSCL_L + tSCL_H is hardware. The
+     * trise/tfall below are ASSUMED fast-mode worst cases (250/100 ns). On this
+     * board the real edges are far faster, so the DELIVERED clock overshoots.
+     *
+     * MEASURED 2026-08-30 with .freq = 400000 (BUS-2, logic analyzer on PH9,
+     * docs/evidence/phase5/bus2_scl_20260830.sr): tSCL_L + tSCL_H = 2150 ns of
+     * hardware, real period 2250 ns median => 444.4 kHz. Real edge time is
+     * therefore ~100 ns, matching CLAUDE.md §2's computed tr ~= 76 ns.
+     * 444 kHz is 11% over the 400 kHz maximum of BOTH devices on this bus:
+     * DRV2605L SLOS854D §6.6 f(SCL), VL53L1X datasheet Table 7 FI2C.
+     *
+     * WHY 350000 AND NOT 360000 OR 370000. At 350000 the algorithm produces
+     * PRESC=8 SCLL=27 SCLH=24, i.e. tSCL_L + tSCL_H = 2505 ns -- already past
+     * the 2500 ns line BEFORE any edge time is added. So the result does not
+     * depend on the edge estimate, nor on the +/-125 ns resolution of an 8 MHz
+     * capture. Predicted delivered clock ~384 kHz; worst case, with edges of
+     * zero, 399 kHz. 360000 would give 2430 ns and rely on the edges to stay
+     * legal. The cost is 14% of bus throughput on a bus with large headroom.
+     *
+     * DO NOT instead lower trise/tfall to the measured values: they also feed
+     * tscldel_min and tsdadel_max, where understating them tightens data
+     * setup and hold. The two uses pull in opposite safety directions.
+     *
+     * .freq_min / .freq_max are UNCHANGED because they are the bucket
+     * selector, not the target -- I2C_GetTiming() matches the caller's
+     * requested frequency against this range and then computes against .freq.
+     * That is also why lowering I2C_BUS_HZ does nothing at all.
+     */
+    .freq = 350000,
     .freq_min = 320000,
     .freq_max = 480000,
     .hddat_min = 0,

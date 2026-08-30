@@ -44,7 +44,11 @@ def main():
                 continue
             parts = [p.strip() for p in line.split(",")]
             if names is None and not parts[0].lstrip("-").isdigit():
-                names = parts
+                # sigrok's CSV export labels every column "logic", which is no
+                # help when you are trying to name a channel. Fall back to
+                # positional D0..Dn whenever the header is not distinct.
+                names = parts if len(set(parts)) == len(parts) else \
+                        ["D%d" % i for i in range(len(parts))]
                 cols = [[] for _ in names]
                 continue
             if names is None:                      # headerless capture
