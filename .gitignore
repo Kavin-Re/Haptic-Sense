@@ -30,3 +30,9 @@ docs/session_bundle/
 # vendor datasheets: kept locally and cited by CLAUDE.md, deliberately NOT
 # tracked - 10 MB of TI/ST PDFs, and CLAUDE.md SS7 forbids license mixing.
 docs/datasheets/
+
+# staging area for files awaiting manual deletion. Contains the SAME July
+# bundle that docs/session_bundle/ excludes -- a stale app_i2c.c and ST's
+# unfilled vl53l1_platform.c -- under a different name, which defeated that
+# rule. 4.7 MB, and re-introducing ST's stub is forbidden (HANDOFF_20260903 SS7).
+docs/_to_delete/
