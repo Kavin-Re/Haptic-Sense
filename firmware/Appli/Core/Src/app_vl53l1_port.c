@@ -79,6 +79,64 @@
  * stats reports the largest ever seen so the margin is observable rather than
  * assumed. Anything larger is REFUSED, not truncated.
  */
+/*
+ * DIAGNOSTIC: INTER-WRITE SPACING. Default 0 = off, no behaviour change.
+ *
+ * VL53L1X_SensorInit fires 91 WrBytes back to back with no delay of any
+ * kind. Each one is a full HAL_I2C_Mem_Write_DMA + semaphore round trip, so
+ * the gap between one STOP and the next START is only task-level overhead --
+ * microseconds. If HAL sees I2C_FLAG_BUSY still set when the next transfer
+ * starts it returns HAL_BUSY, i2c_xfer_once maps that to E_IO, and i2c_xfer
+ * answers E_IO with a ~45 ms bus recovery plus a retry. Fifty-odd failures
+ * concentrated in the only back-to-back write burst in the project would
+ * look exactly like that, and would vary run to run because it is a race.
+ *
+ * SET THIS TO 1 AND REBUILD TO TEST THAT HYPOTHESIS. It spaces every ULD
+ * write by one kernel tick (1-2 ms), which adds ~180 ms to SensorInit and is
+ * irrelevant there. If [RNG] xerr drops to 0, the cause is transfer spacing
+ * and the real fix is to handle HAL_BUSY with a short re-arm instead of a
+ * full bus recovery. If xerr is unchanged, spacing is NOT the cause and you
+ * have eliminated it for the price of one rebuild.
+ *
+ * PUT IT BACK TO 0 once the question is answered -- it also costs the frame
+ * loop 1-2 ms per ClearInterrupt, which is real budget at 20 ms.
+ */
+#define VL53L1_PORT_WRITE_GAP_MS	0
+
+/*
+ * WRITE RETRY THROUGH A REFUSAL WINDOW. Added 2026-09-01 from measurement.
+ *
+ * MEASURED, not assumed (docs/evidence/phase5/PHASE5_SENSORINIT_NACK_20260901.md,
+ * logic-analyzer capture sensorinit_fail_20260901.sr decoded on the wire):
+ * partway through VL53L1X_SensorInit's 91-write block -- after 30 or 31 writes
+ * have ACKed, i.e. ~8.7 ms of sustained traffic -- the VL53L1X stops
+ * acknowledging its own ADDRESS entirely. Not a data NACK: the address byte
+ * itself goes unanswered. It stays that way for 12.8 ms +/- 0.1 ms, identical
+ * across three boots, then resumes and serves 4,236 reads without a single
+ * failure. Registers 0x004C..0x0087 -- 60 of the 91 -- are simply never
+ * written, and the SensorInit data-ready timeout is a downstream symptom.
+ *
+ * Retrying here rides through that window. 25 attempts paced by tk_dly_tsk(1)
+ * covers 25-50 ms against a measured 12.8 ms, so ~13 attempts is the expected
+ * worst case and there is nearly 2x margin.
+ *
+ * THIS IS A MITIGATION, NOT A DIAGNOSIS. The root cause is still open --
+ * XSHUT is measured solid (never once low across a full 8 s capture), so the
+ * live candidates are an AVDD sag on the 7SEMI's own rail (XSHUT idles at
+ * 2.62 V, not the 3.32 V system rail, and DS12385 gives AVDD a 2.6 V minimum)
+ * or an internal busy state in the part. Because it is a mitigation, it is
+ * COUNTED AND PRINTED, never silent: wr_retries, wr_retry_max and wr_refused
+ * appear on the [PRT] heartbeat line. A sensor that needs retries on the bench
+ * may need more of them in a courier-shaken box in Japan, and a counter that
+ * quietly absorbs a hardware fault is exactly the defect class this project
+ * keeps finding.
+ *
+ * Only an E_NOEXS refusal is retried. E_IO and E_TMOUT already get one retry
+ * plus a bus recovery inside i2c_xfer() and mean something different.
+ * Set to 0 to disable and see the raw behaviour.
+ */
+#define VL53L1_PORT_WRITE_RETRY	25
+
 #define PORT_BUF_SZ		32u
 static UB port_buf[PORT_BUF_SZ] __attribute__((aligned(32)));
 
@@ -143,6 +201,39 @@ int8_t VL53L1_WriteMulti(uint16_t dev, uint16_t index, uint8_t *pdata, uint32_t 
 
 	memcpy(port_buf, pdata, (size_t)count);	/* F-6b: never DMA the caller's buffer */
 	err = i2c_wr(dev7, (UW)index, I2C_REG16, port_buf, (UW)count);
+
+#if VL53L1_PORT_WRITE_RETRY > 0
+	/* Ride through the measured 12.8 ms address-refusal window. Counted,
+	 * never silent -- see the note beside the #define. */
+	if (err == E_NOEXS) {
+		UINT tries;
+
+		for (tries = 1u; tries <= (UINT)VL53L1_PORT_WRITE_RETRY; tries++) {
+			tk_dly_tsk(1);
+			memcpy(port_buf, pdata, (size_t)count);
+			err = i2c_wr(dev7, (UW)index, I2C_REG16, port_buf, (UW)count);
+			pstats.wr_retries++;
+			if (err != E_NOEXS)
+				break;
+		}
+		/* D-7. On exhaustion the for-loop exits with `tries` one PAST
+		 * the bound, so an unclamped max prints 26 for a 25-retry
+		 * limit. Clamp: this counter must never exceed its own bound.
+		 * Units: RETRY attempts made (total attempts - 1). */
+		if (tries > (UINT)VL53L1_PORT_WRITE_RETRY)
+			tries = (UINT)VL53L1_PORT_WRITE_RETRY;
+		if (tries > pstats.wr_retry_max)
+			pstats.wr_retry_max = tries;
+		if (err == E_NOEXS)
+			pstats.wr_refused++;
+	}
+#endif
+
+#if VL53L1_PORT_WRITE_GAP_MS > 0
+	/* Diagnostic only -- see the note beside the #define. */
+	tk_dly_tsk((RELTIM)VL53L1_PORT_WRITE_GAP_MS);
+#endif
+
 	return (err == E_OK) ? PORT_OK : port_fail(err, index);
 }
 
@@ -163,6 +254,37 @@ int8_t VL53L1_ReadMulti(uint16_t dev, uint16_t index, uint8_t *pdata, uint32_t c
 	memset(port_buf, 0xA5, (size_t)count);
 
 	err = i2c_rd(dev7, (UW)index, I2C_REG16, port_buf, (UW)count);
+
+#if VL53L1_PORT_WRITE_RETRY > 0
+	/* READS ARE RETRIED TOO (2026-09-01). Once the configuration block
+	 * actually lands, the part starts refusing READS as well -- 845 of
+	 * ~2000 poll-loop reads in the first retry build. Same refusal, same
+	 * recovery, so the same bounded ride-through applies. Counted
+	 * separately from writes so the two are never conflated. */
+	if (err == E_NOEXS) {
+		UINT tries;
+
+		for (tries = 1u; tries <= (UINT)VL53L1_PORT_WRITE_RETRY; tries++) {
+			tk_dly_tsk(1);
+			memset(port_buf, 0xA5, (size_t)count);
+			err = i2c_rd(dev7, (UW)index, I2C_REG16, port_buf, (UW)count);
+			pstats.rd_retries++;
+			if (err != E_NOEXS)
+				break;
+		}
+		/* D-7. On exhaustion the for-loop exits with `tries` one PAST
+		 * the bound, so an unclamped max prints 26 for a 25-retry
+		 * limit. Clamp: this counter must never exceed its own bound.
+		 * Units: RETRY attempts made (total attempts - 1). */
+		if (tries > (UINT)VL53L1_PORT_WRITE_RETRY)
+			tries = (UINT)VL53L1_PORT_WRITE_RETRY;
+		if (tries > pstats.rd_retry_max)
+			pstats.rd_retry_max = tries;
+		if (err == E_NOEXS)
+			pstats.rd_refused++;
+	}
+#endif
+
 	if (err != E_OK)
 		return port_fail(err, index);
 

@@ -81,6 +81,10 @@
 									<listOptionValue builtIn="false" value="../../Lib/screenl/Inc"/>
 									<listOptionValue builtIn="false" value="../../Lib/tracker"/>
 									<listOptionValue builtIn="false" value="../../Model/STM32N6570-DK"/>
+									<listOptionValue builtIn="false" value="../../Lib/STSW-IMG009/STSW-IMG009_v3.5.5/API/platform"/>
+									<listOptionValue builtIn="false" value="../../Lib/STSW-IMG009/STSW-IMG009_v3.5.5/API/core"/>
+									<listOptionValue builtIn="false" value="/home/kavin/haptic-sense/firmware/Appli/Lib/STSW-IMG009/STSW-IMG009_v3.5.5/API/platform"/>
+									<listOptionValue builtIn="false" value="/home/kavin/haptic-sense/firmware/Appli/Lib/STSW-IMG009/STSW-IMG009_v3.5.5/API/core"/>
 								</option>
 								<inputType id="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.assembler.input.709295277" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.assembler.input"/>
 							</tool>
@@ -138,6 +142,8 @@
 									<listOptionValue builtIn="false" value="../../Lib/screenl/Inc"/>
 									<listOptionValue builtIn="false" value="../../Lib/tracker"/>
 									<listOptionValue builtIn="false" value="../../Model/STM32N6570-DK"/>
+									<listOptionValue builtIn="false" value="/home/kavin/haptic-sense/firmware/Appli/Lib/STSW-IMG009/STSW-IMG009_v3.5.5/API/platform"/>
+									<listOptionValue builtIn="false" value="/home/kavin/haptic-sense/firmware/Appli/Lib/STSW-IMG009/STSW-IMG009_v3.5.5/API/core"/>
 								</option>
 								<inputType id="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.compiler.input.c.2116939509" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.c.compiler.input.c"/>
 							</tool>

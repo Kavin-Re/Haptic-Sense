@@ -31,6 +31,26 @@ typedef struct {
 	UW	param_err;	/* bad address, oversized count, NULL pointer   */
 	UW	max_count;	/* largest count seen — bounce-buffer headroom  */
 	UW	last_addr8;	/* the 8-bit address the ULD last passed in     */
+	/*
+	 * D-7. UNITS, STATED ONCE AND IDENTICALLY FOR BOTH DIRECTIONS. These
+	 * two counters previously carried CONTRADICTORY comments -- "attempts
+	 * needed - 1" for writes and "attempts needed" for reads -- for loops
+	 * that are byte-identical. They also over-reported by one on the
+	 * refusal path, because the for-loop leaves `tries` one PAST its bound,
+	 * so a max of 25 could print as 26. Both fixed in app_vl53l1_port.c.
+	 *
+	 * *_retry_max is RETRY ATTEMPTS MADE for the worst single transfer,
+	 * i.e. (total attempts - 1), and is clamped to VL53L1_PORT_WRITE_RETRY.
+	 * 0 means no transfer ever needed a retry. HANDOFF_20260903 SS4 makes
+	 * these the permanent supply-health regression detector, so they must
+	 * mean exactly one thing and must never print an impossible value.
+	 */
+	UW	wr_retries;	/* total write retries after an E_NOEXS refusal  */
+	UW	wr_retry_max;	/* worst single write: retry attempts made      */
+	UW	wr_refused;	/* writes that exhausted every retry            */
+	UW	rd_retries;	/* total read retries after an E_NOEXS refusal   */
+	UW	rd_retry_max;	/* worst single read: retry attempts made       */
+	UW	rd_refused;	/* reads that exhausted every retry             */
 } vl53l1_port_stats_t;
 
 const vl53l1_port_stats_t *vl53l1_port_stats(void);
