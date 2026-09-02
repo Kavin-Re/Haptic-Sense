@@ -276,6 +276,76 @@ Fallback BSP: official tron-forum/mtk3_bsp2 **v1.00.04 (May 2026) officially sup
 - **FIRST REAL FAULT CAUGHT BY THE RUNTIME POLL, 2026-08-30.** `[HLT] faults=0x1` = `OC_DETECT`: two bare twisted joints between the motor leads and the jumper wires, a centimetre apart in free air, shorted **only while the motor was running — its own vibration closed them.** Every other indicator was clean (`init=0 armed=1 cfglost=0 err=0 canary_err=0`), so without the poll the symptom was "the buzz feels weaker sometimes". `[EFF] late=3 stuck=1` localised it as the shutdown-and-restart cycle rather than a hard short. Fixed by separating and offsetting the joints; 22 heartbeats clean afterwards, coil undamaged (effect duration unchanged across three boots, 58505–58760 µs, 0.44% spread). **Block 5 rule, earned the hard way: every motor connection soldered, sleeved, offset so no two conductors can meet, and strain-relieved.** Evidence: `docs/evidence/phase5/PHASE5_OC_DETECT_20260830.md`.
 - **HAPTIC CHAIN LIVE 2026-08-30 — first physical haptic output in the project.** Synthetic hazard → `drv2605l_trig_fire()` 2 µs edge on PE13 (CN11 pin 7) → DRV2605L → ERM buzz. Two pulses per 6.6 s hazard burst at the interim 125 ms R-3 floor. Over 280 hazard events: `pulses + suppressed == hazard` exactly, `faults=0x0`, `cfglost=0`, `err=0 tmo=0 recov=0`, `canary_err=0`, 47.6 Hz — identical to the Phase 4 frame rate. **H-D3 (effect duration) is the last open item before the R-3 floor can leave its interim value.**
 
+### VL53L1X Verification Ledger (Block 2, 2026-08-31 / 09-01)
+
+- **V-W-3 CLOSED 2026-08-31 — 7SEMI pull-ups measured, board disconnected.**
+  XSHUT↔VIN **4.13 kΩ** (gradual rise: the meter was charging board capacitance,
+  so treat it as "a path exists", not as a resistor value); XSHUT↔GND 1.79 MΩ
+  (no pull-down); SDA↔SCL 19.8 kΩ (= 2 × 9.9 kΩ, board identity confirmed).
+  **Powered, XSHUT idles at 2.62 V** — note this is NOT the 3.32 V system rail,
+  so XSHUT is pulled to something else on the carrier. Relevant because
+  DS12385 gives AVDD a **2.6 V minimum** and there is no bulk capacitance.
+- **GPIO1 HAS NO PULL-UP ON THE 7SEMI. §2's premise for PD0 was wrong.**
+  GPIO1↔VIN measured **2.46 MΩ**. §2 specifies PD0 as "input, no internal pull
+  (breakout already pulls it up)" — it does not. GPIO1 is an open-drain output
+  (DS12385 pin table), so with no pull-up it can only pull low and floats
+  otherwise. **Confirmed on the wire 2026-09-01:** an 8 s logic-analyzer capture
+  of GPIO1 shows **7,202 low episodes, all short and clustered in a 1.4 ms
+  window** — that is a floating input picking up noise, not an interrupt.
+  Block 2 is unaffected (the frame loop polls `CheckForDataReady` over I2C and
+  nothing reads PD0). **When EXTI is wanted, either fit 10 kΩ GPIO1→VIN (ST's
+  recommended value) or enable the STM32 internal pull-up on PD0** — the latter
+  is now safe, because DS12385 gives AVDD 2.6/2.8/**3.5 V** so 3.3 V logic is in
+  range and the "may be 2.8 V logic" caveat in §2 does not apply.
+- **V-W-1 CLOSED 2026-08-31 — rail metered at last.** CN8 **3.32 V**, DRV2605L
+  breakout **3.31 V**. **H-D5 CLOSED with it: 10 mV of wiring drop.**
+  Still owed: VIN metered at the 7SEMI pin itself, which has never been done.
+- **Pull-up budget confirmed by measurement, no modification needed.**
+  Powered-off SDA↔SCL with all three devices on the bus read **1.612 kΩ**
+  against a predicted 2 × 818 = 1636 Ω (1.5%, inside meter tolerance).
+  Sink = (3.32 − 0.4)/818 = **3.57 mA** against a 4 mA limit. §2's "Block 2:
+  + 7SEMI → 818 Ω, OK" row is now measured, not computed.
+- **V-5 / H1 CLOSED 2026-09-01 — 16-bit addressing PROVEN ON THE WIRE.**
+  This is the L5 deliverable and it is done. From
+  `docs/evidence/phase5/sensorinit_fail_20260901.sr`, decoded:
+  `52 01 0F` → `53 EA`, `52 01 10` → `53 CC`, and `52 01 0F` → `53 EA CC 10`
+  (three-byte block read, device auto-increment). Wire order is exactly
+  `0x52 idxMSB idxLSB data`, as HAL_I2C_Mem_Read_DMA predicts. **The REG8
+  negative control is on the same capture:** `52 0F` → `53 00` — one index byte,
+  not two, returning a different value, so the 8-bit and 16-bit branches are
+  provably distinct on this bus. **Archive the `.sr`; it is submission
+  evidence and cannot be retaken after 18 Sep.**
+- **Bus timing verified across 4,609 measured gaps.** Real STOP→next-START:
+  min **10.75 µs**, median 80.75 µs, and **zero** below the 1.3 µs fast-mode
+  `t(BUF)` minimum. SCL low pulse: median 1.500 µs, p99 2.500 µs over 207,130
+  pulses. The bus is clean and the master's timing is not a suspect.
+- **Adding the 7SEMI did not harm the DRV2605L.** Same capture: 41 reads and
+  33 writes to 0x5A, **zero NACKs**. Block 1 is intact and the fault is
+  specific to 0x29.
+- **OPEN — THE VL53L1X REFUSES ITS OWN ADDRESS FOR 12.8 ms MID-CONFIGURATION.**
+  After 30–31 of `VL53L1X_SensorInit`'s 91 writes ACK (~8.7 ms of sustained
+  traffic), the part stops answering its **address** — not a data NACK, the
+  address byte itself — for **12.8 ms ± 0.1 ms, identical across three boots**,
+  then recovers and serves 4,236 reads with no failures. Registers
+  **0x004C..0x0087, 60 of 91, are never written**, and the SensorInit data-ready
+  timeout is a downstream symptom (the poll then reads `0x0030 → 0x11` and
+  `0x0031 → 0x03`, so `IntPol = 0` while `Temp & 1 = 1` and `isDataReady` can
+  never be set). `calls=3093` matches the full path exactly.
+  **NOT back-to-back transfer spacing** — the gap before the first NACK is
+  161 µs and no gap in the whole capture is under 1.3 µs. **NOT XSHUT dropping**
+  — a dedicated 8 s capture with the analyzer on XSHUT shows it **never once
+  low**. Live candidates: an AVDD sag on the 7SEMI's own rail (see the 2.62 V
+  note above; no bulk capacitance fitted), or an internal busy state in the
+  part. Mitigated, visibly, by a bounded write retry in the platform shim
+  (`VL53L1_PORT_WRITE_RETRY`, counted on the `[RTY]` heartbeat line — a
+  mitigation that hides itself would be the same defect class this project
+  keeps finding). Full record:
+  `docs/evidence/phase5/PHASE5_SENSORINIT_NACK_20260901.md`.
+- **Tooling:** `docs/evidence/phase5/decode_sr_i2c.py` decodes I2C straight out
+  of a sigrok `.sr` without PulseView — address/NACK census, which register
+  indices were written and which are missing, NACK bursts and their spans,
+  real STOP→START gaps, SCL low-pulse widths. Needs numpy.
+
 ## 9. HOW TO BEHAVE (Claude Code)
 
 - Direct, concise, highly technical. No filler. Tradeoffs as Option A/B — the developer decides.

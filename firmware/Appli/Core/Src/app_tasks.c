@@ -47,6 +47,8 @@
 
 #include "app_i2c.h"
 #include "app_drv2605l.h"
+#include "app_vl53l1x.h"
+#include "app_vl53l1_port.h"
 #include "stm32n6xx_hal.h"
 #include "tk/tkernel.h"
 #include "tm/tmonitor.h"
@@ -158,7 +160,10 @@ static UW hb_dwt_intervals;		/* completed intervals; <2 = not settled */
 #ifdef DEBUG_TIMING
 /* DWT corroboration (Red Zone #3). dwt_t0 written by inference_task at
  * D0-set, read by hazard_task at D1-set — strictly ordered by the
- * result_ready_sem handshake. cycles / 600 = µs at 600 MHz. */
+ * result_ready_sem handshake. Cycles are the measurement; the cycles->us
+ * divisor is DERIVED from the live CPU clock at print time, never
+ * hardcoded — see the print site. (This comment said "600 MHz" until
+ * 2026-08-30; CPUCLK is 800 MHz, G-8.) */
 static volatile UW dwt_t0;
 static volatile UW dwt_dt_min = 0xFFFFFFFFu;	/* lifetime min, cycles */
 static volatile UW dwt_dt_max;			/* lifetime max, cycles */
@@ -392,6 +397,24 @@ static void sensor_task_fct(INT stacd, void *exinf)
 		 * connected to OUT+/OUT-. Result lands in drv2605l_get_stats().
 		 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
 		(void)drv2605l_init();
+
+		/* BLOCK 2 STEP L1 (plan v2 step 11): VL53L1X raw register
+		 * probe. Deliberately LAST in this block — Block 1 is the
+		 * fallback demo and is brought up before anything new can
+		 * disturb the bus. Uses the L1 primitive only; no shim, no
+		 * ULD. Result lands in app_i2c_stats(), printed as [TOF].
+		 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
+		app_i2c_tof_probe();
+
+		/* BLOCK 2 L2 — the ULD path, GATED ON THE RAW PROBE. If the
+		 * sensor did not answer a plain 16-bit register read, running
+		 * a 91-write init at it can only produce a confusing failure
+		 * further from the cause. One binary therefore works both
+		 * before and after the 7SEMI is soldered: pre-solder this is
+		 * simply skipped and [RNG] reads init=1 (not run).
+		 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
+		if (app_i2c_stats()->tof_result == E_OK)
+			(void)vl53l1x_init();
 	}
 
 	for (;;) {
@@ -411,6 +434,15 @@ static void sensor_task_fct(INT stacd, void *exinf)
 			stat_dataq_ovr++;	/* queue full: frame dropped */
 
 		stat_frames++;
+
+		/* BLOCK 2 runtime: one ToF frame if one is ready, else an
+		 * immediate return. ~0.5 ms of I2C worst case (2 + 17 + 1
+		 * bytes) inside a 20 ms budget. Self-disables unless
+		 * vl53l1x_init() returned E_OK, so this is inert until the
+		 * sensor is on the bus. Block 4 is where d(t) reaches
+		 * feature_buf; this block only proves the frame loop.
+		 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
+		vl53l1x_service();
 
 		/* HAP-T9 (H-D3): measure real effect-1 duration by timing the
 		 * GO bit. No-op except in the window after one of the first few
@@ -470,9 +502,108 @@ static void heartbeat_task_fct(INT stacd, void *exinf)
 				  s->gate_addr,
 				  s->xfer_ok, s->xfer_err, s->timeouts, s->recoveries,
 				  s->clk_pclk1_hz, s->clk_sysclk_hz);
+			/* nack= is a SUBSET of err=: transfers that failed because
+			 * nothing ACKed, as opposed to a bus fault. err == nack
+			 * means every failure was an absent device. */
+			tm_printf((UB *)"[NAK] nacks=%u\n", s->nacks);
 			tm_printf((UB *)"[CLK] cpu=%u sysb=%u pclk1=%u\n",
 				  s->clk_cpu_hz, s->clk_sysclk_hz,
 				  s->clk_pclk1_hz);
+			/* [TOF] Block 2 L1 probe. PASS is exactly:
+			 *   res=0 step=0 id=0xeacc blk=0xeacc10 ctl!=0xea
+			 * id/blk of 0xa5.. = DMA never wrote; 0xff.. = nothing
+			 * driving; 0x00.. = device drove zeros. DS12385 Table 8. */
+			tm_printf((UB *)"[TOF] res=%d step=%u id=0x%x blk=0x%x ctl=0x%x\n",
+				  (INT)s->tof_result, s->tof_step,
+				  s->tof_id, s->tof_blk, s->tof_ctl);
+		}
+
+		{	/* Block 2 L2 — ULD bring-up and the frame loop.
+			 * PASS is: init=0 step=99 id=0xeacc dm=1 tb=15
+			 *          mstart=0x40 xerr=0, and frames climbing ~50/s.
+			 * init=1 step=0 means the raw probe did not pass, so this
+			 * never ran. step names the first gate that did not hold:
+			 * 1 boot, 2 id, 3 SensorInit, 4 distance mode,
+			 * 5 timing budget, 6 inter-measurement, 7 StartRanging.
+			 * dxfer counts frames dropped because the transfer failed
+			 * (result struct is stack garbage in that case, F-6);
+			 * dstat counts transfers that worked with a bad range. */
+			const vl53l1x_stats_t *v = vl53l1x_get_stats();
+			tm_printf((UB *)"[RNG] init=%d step=%u id=0x%x boot=%u calls=%u xerr=%u dm=%u tb=%u\n",
+				  (INT)v->init_result, v->step, v->sensor_id,
+				  v->boot_polls, v->init_calls, v->init_xfer_err,
+				  v->dm_rb, v->tb_rb);
+			/* vhv= is the D-1 switch as BUILT, not as intended:
+			 * 1 = the warm-up range ran and the two VHV flag writes
+			 * are therefore true; 0 = neither was done and the part
+			 * calibrates VHV on its first real range. A log that
+			 * does not carry this cannot be compared against another
+			 * one, because the two builds range differently. */
+			tm_printf((UB *)"[RNG] osc=%u imp=%u imprb=%u mstart=0x%x cfg=%u cfgfail=0x%x vhv=%u vpolls=%u\n",
+				  v->osc_cal, v->imp_written, v->imp_rb,
+				  v->mode_start_rb, v->cfg_written, v->cfg_fail_idx,
+				  v->vhv_mode, v->vhv_polls);
+
+			/*
+			 * SHIM COUNTERS. Added 2026-09-01 because [RNG] xerr= says
+			 * HOW MANY transfers failed but not WHICH, and not WHY --
+			 * and those are the two facts that separate the candidate
+			 * causes of a SensorInit failure.
+			 *
+			 * ler is the ER of the most recent failure:
+			 *   -42 E_NOEXS  the device NACKed -- it did not answer
+			 *   -57 E_IO     HAL refused or errored (incl. HAL_BUSY on
+			 *                a start, i.e. back-to-back too fast)
+			 *   -50 E_TMOUT  armed but never completed: DMA/semaphore
+			 *
+			 * lidx is the 16-bit REGISTER INDEX of that failure:
+			 *   0x002D..0x0087  a config write in SensorInit's 91-write
+			 *                   block -- the sensor is misconfigured and
+			 *                   the data-ready timeout is a SYMPTOM
+			 *   0x0030 / 0x0031 GPIO_HV_MUX__CTRL / GPIO__TIO_HV_STATUS,
+			 *                   i.e. inside CheckForDataReady's poll --
+			 *                   the writes landed and the failures are
+			 *                   elsewhere, a completely different fault
+			 *   0x0087          SYSTEM__MODE_START -- StartRanging itself
+			 */
+			{
+				const vl53l1_port_stats_t *ps = vl53l1_port_stats();
+
+				tm_printf((UB *)"[PRT] calls=%u xerr=%u ler=%d lidx=0x%x perr=%u maxcnt=%u addr8=0x%x\n",
+					  ps->calls, ps->xfer_err, (INT)ps->last_er,
+					  ps->last_index, ps->param_err,
+					  ps->max_count, ps->last_addr8);
+				/* rty/max/refused: the measured 12.8 ms address-refusal
+				 * window (PHASE5_SENSORINIT_NACK_20260901.md). max is
+				 * attempts needed by the worst single write -- ~13 is
+				 * the predicted value if the window is 12.8 ms. refused
+				 * MUST be 0: non-zero means a write was lost anyway. */
+				tm_printf((UB *)"[RTY] wr=%u wmax=%u wref=%u  rd=%u rmax=%u rref=%u\n",
+					  ps->wr_retries, ps->wr_retry_max,
+					  ps->wr_refused, ps->rd_retries,
+					  ps->rd_retry_max, ps->rd_refused);
+			}
+			/* D-2/D-4. THE GUARD HAD THE SAME SHAPE OF HOLE AS THE COUNTER.
+			 * It printed only when frames/dxfer/dstat were non-zero -- so in
+			 * the exact failure the new counters exist to catch (every
+			 * CheckForDataReady failing, or ClearInterrupt failing once so
+			 * no frame ever arrives) all three stay 0 and the line NEVER
+			 * PRINTS. A diagnostic suppressed by the fault it diagnoses is
+			 * worth less than none. Both new counters join the guard.
+			 *
+			 * nrdy CLIMBS IN NORMAL OPERATION -- it is the poll finding no
+			 * new frame yet, not a fault. The two that must stay at ZERO are
+			 * nrdyerr (D-4: CheckForDataReady itself failed) and dclr (D-2:
+			 * ClearInterrupt failed, after which the part never interrupts
+			 * again). Non-zero dclr beside a frozen frames= is that exact
+			 * signature, and it is NOT a supply fault -- check [RTY] to tell
+			 * the two apart. */
+			if (v->frames > 0u || v->drop_xfer > 0u || v->drop_status > 0u ||
+			    v->drop_ready_err > 0u || v->drop_clear > 0u)
+				tm_printf((UB *)"[RNG] frames=%u last=%u min=%u max=%u nrdy=%u dxfer=%u dstat=%u lst=%u nrdyerr=%u dclr=%u\n",
+					  v->frames, v->last_mm, v->min_mm, v->max_mm,
+					  v->notready, v->drop_xfer, v->drop_status,
+					  v->last_status, v->drop_ready_err, v->drop_clear);
 		}
 
 		{	/* Block 1a: DRV2605L configuration + arming readback */
@@ -569,10 +700,32 @@ static void heartbeat_task_fct(INT stacd, void *exinf)
 
 #ifdef DEBUG_TIMING
 		if (dwt_dt_cnt > 0) {
-			/* cycles / 600 = µs at 600 MHz (CLAUDE.md §3) */
-			tm_printf((UB *)"[HB] dt_us min=%u max=%u mean=%u n=%u\n",
-				  dwt_dt_min / 600u, dwt_dt_max / 600u,
-				  (dwt_dt_sum / dwt_dt_cnt) / 600u, dwt_dt_cnt);
+			/*
+			 * CYCLES -> MICROSECONDS. THE DIVISOR IS DERIVED, NOT
+			 * HARDCODED. This line read `/ 600u` until 2026-08-30,
+			 * which made every figure 1.333x too large once G-8
+			 * confirmed CPUCLK = 800 MHz and that DWT->CYCCNT counts
+			 * CPUCLK (CLAUDE.md §1, §3; PHASE5_T1_CYCCNT_CLOCK). It is
+			 * dead code today because this build does not define
+			 * DEBUG_TIMING — but Block 9 step 34 (the PH6-3 preemption
+			 * re-run under NPU load) turns it on, and there is no bench
+			 * after that. Same derive-it-at-init pattern as
+			 * app_drv2605l.c:101-103.
+			 *
+			 * RAW CYCLES ARE PRINTED TOO. The cycles are the actual
+			 * measurement; the divisor is a derived constant that has
+			 * now been wrong once in this project. A log that carries
+			 * the cycles can be re-derived later; one that carries only
+			 * the microseconds cannot.
+			 */
+			UW cpu_mhz = (UW)HAL_RCC_GetCpuClockFreq() / 1000000u;
+
+			if (cpu_mhz == 0u)
+				cpu_mhz = 800u;	/* never divide by zero */
+			tm_printf((UB *)"[HB] dt_us min=%u max=%u mean=%u n=%u cyc min=%u max=%u mhz=%u\n",
+				  dwt_dt_min / cpu_mhz, dwt_dt_max / cpu_mhz,
+				  (dwt_dt_sum / dwt_dt_cnt) / cpu_mhz, dwt_dt_cnt,
+				  dwt_dt_min, dwt_dt_max, cpu_mhz);
 			dwt_dt_sum = 0;		/* per-interval mean; min/max lifetime */
 			dwt_dt_cnt = 0;
 		}
