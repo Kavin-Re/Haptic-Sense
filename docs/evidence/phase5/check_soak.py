@@ -19,6 +19,8 @@ PAT = {
  "HLT": re.compile(r"\[HLT\] polls=(\d+) faults=0x(\w+) cfglost=(\d+)"),
  "EFF": re.compile(r"\[EFF\] n=(\d+) last=(\d+) min=(\d+) max=(\d+) late=(\d+) stuck=(\d+)"),
  "DWT": re.compile(r"\[DWT\] ok=(\d+) cyc=(\d+) cyc_per_ms=(\d+)"),
+ "NAK": re.compile(r"\[NAK\] nacks=(\d+)"),
+ "TOF": re.compile(r"\[TOF\] res=(-?\d+) step=(\d+) id=0x(\w+) blk=0x(\w+) ctl=0x(\w+)"),
 }
 
 def main():
@@ -53,11 +55,57 @@ def main():
     check(cfg <= {0}, "cfglost -- MODE still 0x01", "max %d" % max(cfg or {0}))
 
     # --- bus health ---
-    err = {int(g[2]) for g in rows["I2C"]}; tmo = {int(g[3]) for g in rows["I2C"]}
+    errs = [int(g[2]) for g in rows["I2C"]]
+    tmo = {int(g[3]) for g in rows["I2C"]}
     rec = {int(g[4]) for g in rows["I2C"]}
-    check(err <= {0}, "I2C err", "max %d" % max(err or {0}))
+    # nacks is a SUBSET of err (app_i2c.c HAL_I2C_ErrorCallback, 2026-08-30):
+    # transfers that failed because nothing ACKed, as opposed to a bus fault.
+    # Older logs have no [NAK] line; treat those as nacks=0, which reproduces
+    # the original single "I2C err" check exactly.
+    naks = [int(g[0]) for g in rows["NAK"]]
+    if len(naks) != len(errs):
+        naks = [0] * len(errs)
+    busfault = {e - n for e, n in zip(errs, naks)}
+    check(busfault <= {0}, "I2C bus faults (err - nacks)",
+          "max %d" % max(busfault or {0}))
     check(tmo <= {0}, "I2C tmo", "max %d" % max(tmo or {0}))
     check(rec <= {0}, "I2C recov", "max %d" % max(rec or {0}))
+    # A NACK is not a bus fault, but it is not nothing either: it means a
+    # device this firmware probes did not answer. Expected to be exactly 1
+    # while the VL53L1X is unsoldered (the Block 2 L1 probe), and 0 after.
+    # --- Block 2 L1 probe: VL53L1X reference registers, DS12385 Table 8 ---
+    # Parsed BEFORE the nack check, because it is what makes the expected
+    # nack count derivable rather than a magic number.
+    tof_ok = None
+    if rows["TOF"]:
+        tof = rows["TOF"][-1]
+        res, step, tid, blk, ctl = int(tof[0]), int(tof[1]), tof[2], tof[3], tof[4]
+        tof_ok = (res == 0 and step == 0 and tid.lower() == "eacc"
+                  and blk.lower() == "eacc10" and ctl.lower() != "ea")
+        check(tof_ok,
+              "VL53L1X L1 probe (0x010F/0x0110 -> EA CC 10, REG8 control)",
+              "res=%d step=%d id=0x%s blk=0x%s ctl=0x%s "
+              "(res=-42 step=1 = no ACK: not soldered, XSHUT, or joints; "
+              "id/blk 0xa5.. = DMA never wrote; 0xff.. = nothing driving; "
+              "res=-57 = ACKed then failed, a different problem)"
+              % (res, step, tid, blk, ctl))
+    else:
+        # Never skip a check silently -- say so on the report.
+        check(True, "VL53L1X L1 probe",
+              "no [TOF] line in this log: pre-Block-2 firmware, check N/A")
+
+    # A NACK is not a bus fault, but it is not nothing either: it means a
+    # device this firmware probes did not answer. The expected count is
+    # DERIVED, not a magic number: the L1 probe stops at its first failing
+    # step, so a VL53L1X that is not on the bus yet accounts for exactly one
+    # -- and one only. Anything above that is an unexplained NACK.
+    exp = 0 if (tof_ok is None or tof_ok) else 1
+    nakmax = max(naks or [0])
+    check(nakmax == exp,
+          "I2C nacks -- every probed device answered (expected %d)" % exp,
+          "max %d; expected %d %s" % (nakmax, exp,
+              "(VL53L1X not yet on the bus -- see the L1 probe above)"
+              if exp else "(all probed devices should answer)"))
 
     # --- RZ4 canary and the lockstep it guards ---
     can = {int(g[4]) for g in hb}
@@ -117,6 +165,26 @@ def main():
         print("  FAIL  %-46s %s" % (label, detail))
     print()
     if fails:
+        # ONE special case, and it exists so this tool never cries wolf.
+        # Before the VL53L1X is soldered the L1 probe MUST fail -- that is the
+        # point of running the soak first. If it is the ONLY failure and it
+        # failed by not being answered at all (E_NOEXS, step 1), say so
+        # plainly instead of telling the operator not to solder, which is
+        # exactly what they are about to and should do.
+        only_absent = (len(fails) == 1
+                       and fails[0][0].startswith("VL53L1X L1 probe")
+                       and "res=-42 step=1" in fails[0][1])
+        if only_absent:
+            print("RESULT: 1 CHECK FAILED, and it is the EXPECTED one -- the "
+                  "VL53L1X is not on the bus yet")
+            print("        (res=-42 step=1 = no ACK). Everything else over "
+                  "%.1f min is clean, so the" % (dur / 60.0))
+            print("        Block 1 chain is intact and the bench is ready for "
+                  "the 7SEMI to go on.")
+            if dur < 540:
+                print("        NOTE: only %.1f min of data -- the re-soak "
+                      "target is 10 min." % (dur / 60.0))
+            sys.exit(3)
         print("RESULT: %d CHECK(S) FAILED. Do not solder anything onto this bench." % len(fails))
         sys.exit(1)
     if dur < 540:

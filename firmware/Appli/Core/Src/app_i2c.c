@@ -96,7 +96,50 @@ static void i2c_complete(I2C_HandleTypeDef *hi2c, ER err)
 
 void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c) { i2c_complete(hi2c, E_OK); }
 void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c) { i2c_complete(hi2c, E_OK); }
-void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)     { i2c_complete(hi2c, E_IO); }
+/*
+ * A PLAIN NACK IS "NOBODY THERE", NOT "THE BUS IS WEDGED" (2026-08-30).
+ *
+ * Until now every HAL error mapped to E_IO, and i2c_xfer() answers E_IO with
+ * a full DeInit + nine SCL pulses + STOP + re-init + one retry: ~145 ms and
+ * `recoveries` += 1 for a device that is simply not soldered on yet. That was
+ * recorded as known debt in the app_i2c_gate_test() comment block ("COST
+ * NOTE ... deferred to the bus-scan work"); Block 2 is when it comes due,
+ * because the VL53L1X probe runs before the sensor exists and the soak
+ * verdict (docs/evidence/phase5/check_soak.py) checks `recov == 0`.
+ *
+ * Every fact here is from the HAL source in this tree, not from memory:
+ *   - HAL_I2C_ERROR_AF == 0x00000004U          stm32n6xx_hal_i2c.h:166
+ *   - HAL sets it with |=, so an exact-equality test means AF AND NOTHING
+ *     ELSE; anything with a BERR/ARLO/DMA bit alongside is a real bus fault
+ *     and still gets the recovery.                stm32n6xx_hal_i2c.c:5238 ff
+ *   - ErrorCode is cleared to HAL_I2C_ERROR_NONE at the top of every
+ *     HAL_I2C_Mem_*_DMA, so it describes THIS transaction and cannot be a
+ *     stale bit from the previous one.            stm32n6xx_hal_i2c.c:3266
+ *
+ * E_NOEXS ("Object does not exist", tk/errno.h:55) is the honest code: the
+ * transfer really did fail, so xfer_err still counts it, but the bus is fine
+ * and there is nothing to recover or retry.
+ *
+ * WHY SKIPPING THE RECOVERY IS SAFE. Verified in the HAL source, not assumed:
+ * I2C_ITError sets hi2c->State = HAL_I2C_STATE_READY before it touches the
+ * DMA channels (stm32n6xx_hal_i2c.c:6823 ff), and when a DMA abort is needed
+ * it defers HAL_I2C_ErrorCallback to I2C_DMAAbort, which runs after the abort
+ * completes -- so by the time this function is entered the handle and both
+ * channels are READY. And there is still a net underneath: if the peripheral
+ * were somehow left busy, the NEXT HAL_I2C_Mem_*_DMA returns HAL_BUSY, which
+ * i2c_xfer_once maps to E_IO, which DOES take the recovery path. A genuinely
+ * wedged bus therefore still gets recovered -- one transfer later.
+ */
+void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
+{
+	ER err = E_IO;
+
+	if (hi2c == &hi2c1 && hi2c->ErrorCode == HAL_I2C_ERROR_AF) {
+		stats.nacks++;
+		err = E_NOEXS;
+	}
+	i2c_complete(hi2c, err);
+}
 void HAL_I2C_AbortCpltCallback(I2C_HandleTypeDef *hi2c) { i2c_complete(hi2c, E_ABORT); }
 
 /* ------------------------------------------------------------------------ */
@@ -441,7 +484,14 @@ static ER i2c_xfer(BOOL is_read, UB dev7, UW reg, UINT regsz, UB *buf, UW len)
 	i2c_busy = TRUE;
 
 	err = i2c_xfer_once(is_read, dev7, reg, regsz, buf, len);
-	if (err != E_OK) {
+	if (err == E_NOEXS) {
+		/* The device did not ACK. The bus is healthy and the next
+		 * address will work, so NO recovery and NO retry: a retry
+		 * only doubles the cost of an absent part and a recovery
+		 * makes `recoveries` mean two different things at once.
+		 * See HAL_I2C_ErrorCallback above for why this is safe to
+		 * distinguish. */
+	} else if (err != E_OK) {
 		if (err == E_TMOUT || err == E_IO)
 			i2c1_bus_recover();
 		err = i2c_xfer_once(is_read, dev7, reg, regsz, buf, len);
@@ -650,6 +700,172 @@ void app_i2c_gate_test(void)
 		stats.gate_whoami = packed;
 		stats.gate_wr = (W)drv2605l_write_probe();
 	}
+}
+
+/* ------------------------------------------------------------------------ */
+/* BLOCK 2 STEP L1 — VL53L1X RAW REGISTER PROBE (plan v2 Block 2 step 11)    */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * FIRST 16-BIT-ADDRESSED TRANSFER IN THIS PROJECT'S HISTORY. TK_PRI 3 only.
+ *
+ * Runs on the L1 primitive DIRECTLY. Nothing from app_vl53l1_port.c and
+ * nothing from ST's ULD is involved, so a failure here has exactly one
+ * suspect list: the solder joints, the bus, and the 16-bit index path. That
+ * separation is the whole point of doing this before the shim runs.
+ *
+ * WHAT IS BEING READ, and where every number comes from:
+ *   docs/datasheets/vl53l1x_datasheet.pdf (ST DS12385 Rev 8), section 4.2
+ *   "I2C interface - reference registers", Table 8 — verbatim:
+ *
+ *       Model ID        0x010F     0xEA
+ *       Module type     0x0110     0xCC
+ *       Mask revision   0x0111     0x10
+ *
+ *   ST introduces that table with "The registers shown in the table below
+ *   can be used to validate the user I2C interface" — i.e. this probe is the
+ *   use ST designed those registers for.
+ *
+ *   7-bit address 0x29: CLAUDE.md section 2 hardware map. The camera FFC
+ *   must stay out of CN14 because the MB1854's VL53L5CX also answers 0x29.
+ *
+ * WHY THREE POSITIVE STEPS AND ONE NEGATIVE ONE.
+ *
+ * Step 1 (0x010F -> 0xEA) proves a 16-bit-addressed read completes and lands
+ * a byte. Step 2 (0x0110 -> 0xCC) is what makes step 1 mean something: the
+ * two indices differ only in the LOW byte, so a pass on BOTH proves the low
+ * byte reached the wire, and the values differ, so neither can be a stuck
+ * bus. Step 3 reads all three as ONE 3-byte block, which is the first
+ * multi-byte DMA receive in the project and the mechanism the per-frame
+ * 17-byte VL53L1X_GetResult() depends on; it also proves the device's
+ * address auto-increment (DS12385 section 4.2 note: "Multibyte read/writes
+ * are always addressed in ascending order with the MSB first").
+ *
+ * Step 4 is a NEGATIVE CONTROL and it is the one that closes the risk
+ * register's "I2C_REG16 silently wrong" item in firmware rather than on a
+ * logic analyzer. The same index 0x010F is read again with I2C_REG8. The
+ * mechanism is not assumed — it is in the HAL source
+ * (STM32Cube_FW_N6/.../Src/stm32n6xx_hal_i2c.c, HAL_I2C_Mem_Read_DMA):
+ *
+ *     if (MemAddSize == I2C_MEMADD_SIZE_8BIT)
+ *         hi2c->Instance->TXDR = I2C_MEM_ADD_LSB(MemAddress);
+ *     else
+ *         hi2c->Instance->TXDR = I2C_MEM_ADD_MSB(MemAddress);   (LSB via IRQ)
+ *
+ * so an 8-bit-sized transfer sends ONLY 0x0F, the sensor ACKs it like any
+ * register-mapped slave, and returns whatever lives at 0x000F. If step 4
+ * returns 0xEA as well, then the two branches are indistinguishable on this
+ * bus and step 1 proved nothing — that is the exact silent failure this
+ * project keeps finding, and it would otherwise be invisible.
+ *
+ * FAILURE MODES ARE DISTINGUISHABLE BY VALUE, not by a status flag. Every
+ * read is preceded by a GATE_SENTINEL pre-fill (CLAUDE.md section 3, the
+ * rule that surfaced the GPDMA defect):
+ *     0xEACC10 -> healthy
+ *     0xA5A5A5 -> the DMA never wrote; the transfer "succeeded" untransferred
+ *     0xFFFFFF -> nothing driving the data phase (absent or held in reset)
+ *     0x000000 -> the device really drove zeros
+ *
+ * COST WHEN THE SENSOR IS NOT PRESENT. Since 2026-08-30 a plain NACK is
+ * classified as E_NOEXS and takes neither bus recovery nor a retry (see
+ * HAL_I2C_ErrorCallback), so an absent VL53L1X costs one NACK, ~30 us, and
+ * leaves `recoveries` at zero. This probe also STOPS AT THE FIRST FAILING
+ * STEP, so it costs one transfer rather than four. Until the sensor is
+ * soldered expect exactly:
+ *     [TOF] res=-42 step=1 id=0xa5 blk=0x0 ctl=0x1ff
+ *     [I2C] ... err=1 tmo=0 recov=0        [NAK] nacks=1
+ * i.e. err == nacks == 1 and recov == 0 — one absent device, no bus fault.
+ * `res=-42` is E_NOEXS (tk/errno.h:55); `res=-57` would be E_IO, which here
+ * would mean the part ACKed and then the transfer failed, a different and
+ * much more interesting problem.
+ * // ONLY CALL FROM PRIORITY 3 SENSOR TASK
+ */
+#define TOF_ADDR7		0x29u	/* CLAUDE.md section 2 */
+#define TOF_REG_MODEL_ID	0x010Fu	/* DS12385 Table 8 */
+#define TOF_REG_MODULE_TYPE	0x0110u
+#define TOF_VAL_MODEL_ID	0xEAu
+#define TOF_VAL_MODULE_TYPE	0xCCu
+#define TOF_VAL_MASK_REV	0x10u
+#define TOF_CTL_NOT_RUN		0x1FFu	/* > 8 bits: cannot collide with a byte */
+
+void app_i2c_tof_probe(void)
+{
+	ER err;
+
+	stats.tof_result = 1;		/* 1 = not run (0 would read as E_OK) */
+	stats.tof_step   = 0u;
+	stats.tof_id     = 0u;
+	stats.tof_blk    = 0u;
+	stats.tof_ctl    = TOF_CTL_NOT_RUN;
+
+	/* --- step 1: 0x010F, 16-bit index, one byte -> 0xEA --------------- */
+	stats.tof_step = 1u;
+	gate_buf[0] = GATE_SENTINEL;
+	err = i2c_rd(TOF_ADDR7, TOF_REG_MODEL_ID, I2C_REG16, gate_buf, 1);
+	stats.tof_id = (UW)gate_buf[0];
+	if (err != E_OK) {
+		stats.tof_result = (W)err;
+		return;
+	}
+	if (gate_buf[0] != TOF_VAL_MODEL_ID) {
+		stats.tof_result = E_IO;	/* ACKed, wrong byte */
+		return;
+	}
+
+	/* --- step 2: 0x0110 -> 0xCC. Differs from step 1 in the LOW index
+	 * byte only, so passing both proves the low byte reached the wire. -- */
+	stats.tof_step = 2u;
+	gate_buf[0] = GATE_SENTINEL;
+	err = i2c_rd(TOF_ADDR7, TOF_REG_MODULE_TYPE, I2C_REG16, gate_buf, 1);
+	stats.tof_id = (stats.tof_id << 8) | (UW)gate_buf[0];
+	if (err != E_OK) {
+		stats.tof_result = (W)err;
+		return;
+	}
+	if (gate_buf[0] != TOF_VAL_MODULE_TYPE) {
+		stats.tof_result = E_IO;
+		return;
+	}
+
+	/* --- step 3: one 3-byte block at 0x010F -> EA CC 10 ---------------
+	 * First multi-byte DMA receive in the project. VL53L1X_GetResult()
+	 * does exactly this shape at 17 bytes, every frame, for ever. */
+	stats.tof_step = 3u;
+	gate_buf[0] = GATE_SENTINEL;
+	gate_buf[1] = GATE_SENTINEL;
+	gate_buf[2] = GATE_SENTINEL;
+	err = i2c_rd(TOF_ADDR7, TOF_REG_MODEL_ID, I2C_REG16, gate_buf, 3);
+	stats.tof_blk = ((UW)gate_buf[0] << 16) | ((UW)gate_buf[1] << 8) |
+			(UW)gate_buf[2];
+	if (err != E_OK) {
+		stats.tof_result = (W)err;
+		return;
+	}
+	if (gate_buf[0] != TOF_VAL_MODEL_ID ||
+	    gate_buf[1] != TOF_VAL_MODULE_TYPE ||
+	    gate_buf[2] != TOF_VAL_MASK_REV) {
+		stats.tof_result = E_IO;
+		return;
+	}
+
+	/* --- step 4: NEGATIVE CONTROL. Same index, I2C_REG8. Must NOT be
+	 * 0xEA; if it is, the 8-bit and 16-bit branches are indistinguishable
+	 * here and steps 1-3 proved nothing about address width.
+	 * A transfer error on this step is not a probe failure — an undefined
+	 * index may legitimately misbehave — so it is recorded, not fatal. */
+	stats.tof_step = 4u;
+	gate_buf[0] = GATE_SENTINEL;
+	err = i2c_rd(TOF_ADDR7, TOF_REG_MODEL_ID, I2C_REG8, gate_buf, 1);
+	if (err == E_OK) {
+		stats.tof_ctl = (UW)gate_buf[0];
+		if (gate_buf[0] == TOF_VAL_MODEL_ID) {
+			stats.tof_result = E_IO;	/* control did not discriminate */
+			return;
+		}
+	}
+
+	stats.tof_step   = 0u;
+	stats.tof_result = E_OK;
 }
 
 const app_i2c_stats_t *app_i2c_stats(void)

@@ -36,6 +36,7 @@ typedef struct {
 	UW	xfer_err;	/* failed after retry                     */
 	UW	timeouts;	/* tk_wai_sem E_TMOUT count               */
 	UW	recoveries;	/* bus-recovery invocations               */
+	UW	nacks;		/* address/data NACK: device not present   */
 	W	gate_result;	/* E_OK once the L1 gate test passed      */
 	W	gate_wr;	/* H-D9: 1 = not run, E_OK = write proven */
 	UW	gate_wr_seen;	/* byte read back after the scratch write */
@@ -44,6 +45,14 @@ typedef struct {
 	UW	clk_pclk1_hz;	/* logged at init — design §6 verification */
 	UW	clk_sysclk_hz;	/* IC2 sysb_ck — NOT the CPU clock         */
 	UW	clk_cpu_hz;	/* IC1 CPUCLK — this is what DWT counts    */
+	/* Block 2 L1 raw probe — VL53L1X reference registers.
+	 * Values: docs/datasheets/vl53l1x_datasheet.pdf (DS12385 Rev 8) §4.2
+	 * Table 8. See app_i2c_tof_probe() for what each field distinguishes. */
+	W	tof_result;	/* 1 = not run; E_OK = every check passed  */
+	UW	tof_step;	/* first failing step 1..4; 0 = none       */
+	UW	tof_id;		/* 0x010F,0x0110 read singly: 0xEACC       */
+	UW	tof_blk;	/* 3-byte block read at 0x010F: 0xEACC10   */
+	UW	tof_ctl;	/* REG8 control read; 0x1FF = did not run  */
 } app_i2c_stats_t;
 
 /* Init I2C1 + GPDMA + kernel IRQ registration. TK_PRI 3 context only. */
@@ -58,6 +67,10 @@ ER i2c_wr(UB dev7, UW reg, UINT regsz, const UB *buf, UW len);
  * a single register read (MPU6050 WHO_AM_I, trying 0x68 then 0x69) BEFORE any
  * L2/ULD code exists. Result lands in stats; heartbeat prints it. */
 void app_i2c_gate_test(void);
+
+/* BLOCK 2 STEP L1: VL53L1X raw register probe on the L1 primitive, with a
+ * REG8 negative control. Runs BEFORE any shim or ULD code. TK_PRI 3 only. */
+void app_i2c_tof_probe(void);
 
 const app_i2c_stats_t *app_i2c_stats(void);
 
