@@ -32,7 +32,14 @@ import subprocess
 import sys
 
 SAMPLE_NS = 125.0          # 8 MHz sample rate
-CPU_MHZ = 600              # DWT cross-check: cycles = us * 600
+CPU_MHZ = 800              # DWT cross-check: cycles = us * 800
+# CORRECTED 2026-09-03. Was 600. G-8 closed 2026-08-30: CPUCLK is 800 MHz and
+# DWT->CYCCNT counts the processor clock (CLAUDE.md sections 1 and 3, evidence
+# docs/evidence/phase5/PHASE5_T1_CYCCNT_CLOCK_20260830.md). The stale constant
+# made both archived analysis_run*.txt print "2,025 cycles @ 600 MHz" for the
+# 3.375 us worst case -- and those two files are the submission evidence for
+# the project's headline number. 3.375 x 800 = 2,700 cycles.
+# REGENERATE BOTH .txt FILES WHILE THE .sr CAPTURES STILL EXIST.
 PASS_LIMIT_US = 1000.0     # < 1 ms, hardware-verified
 HIST_BINS = 20
 HIST_BAR_WIDTH = 56
