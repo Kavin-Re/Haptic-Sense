@@ -49,6 +49,7 @@
 #include "app_drv2605l.h"
 #include "app_vl53l1x.h"
 #include "app_vl53l1_port.h"
+#include "velocity_lsq.h"
 #include "stm32n6xx_hal.h"
 #include "tk/tkernel.h"
 #include "tm/tmonitor.h"
@@ -338,28 +339,66 @@ static void inference_task_fct(INT stacd, void *exinf)
  */
 static void sensor_fill_frame(void)
 {
-	static W d_mm = SYN_D_FAR_MM;
-	static W dir = -1;		/* -1 = approaching, +1 = retreating */
-	static W v_prev_cm_s = 0;
-	W v_cm_s, a_cm_s2, d_prev;
+	static W  d_mm = SYN_D_FAR_MM;
+	static W  dir = -1;		/* -1 = approaching, +1 = retreating */
+	/*
+	 * Least-squares velocity/acceleration replaces the naive two-point
+	 * delta that shipped here (docs/PHASE5_DESIGN_sensor_bringup_i2c.md
+	 * "Feature computation" called the naive form "Unacceptable" for
+	 * mm-noise amplification; the 2026-09-03 audit, docs/audits/
+	 * PROJECT_AUDIT_20260903.md section 1.3, found it still in place).
+	 * t_hist_ms/v_hist_cm_s/vt_hist_ms are parallel histories, [0] =
+	 * newest, matching feature_buf[0]'s own convention -- feature_buf[0
+	 * .. VLSQ_WINDOW-1] literally IS the distance window the velocity
+	 * estimator reads, so no separate distance array is kept here.
+	 * Timestamps are REAL per-frame time from tk_get_otm(), not an
+	 * assumed fixed 20 ms period: tk_slp_tsk() below is a delay, not a
+	 * period, so frames are not exactly 20 ms apart under any load (bus
+	 * recovery, a retry burst, the [EFF] measurement window) -- a fixed-
+	 * period assumption would silently mis-scale v whenever the loop
+	 * ran slower than nominal.
+	 */
+	static UW t_hist_ms[VLSQ_WINDOW];
+	static W  v_hist_cm_s[VLSQ_WINDOW];
+	static UW vt_hist_ms[VLSQ_WINDOW];
+	static INT d_hist_n = 0, v_hist_n = 0;
+	W v_cm_s, a_cm_s2;
+	SYSTIM now;
 	INT i;
 
-	d_prev = d_mm;
 	d_mm += dir * SYN_STEP_MM;
 	if (d_mm <= SYN_D_NEAR_MM) dir = +1;	/* turn around, retreat  */
 	if (d_mm >= SYN_D_FAR_MM)  dir = -1;	/* turn around, approach */
 
-	/* closing velocity: (Δmm per 20 ms) * 50 frames/s = mm/s; /10 = cm/s.
-	 * SYN_STEP_MM=10 -> 50 cm/s while approaching (> 20 cm/s threshold). */
-	v_cm_s = (d_prev - d_mm) * 5;
-	/* acceleration: Δ(cm/s) per frame * 50 = cm/s² (nonzero at turnarounds) */
-	a_cm_s2 = (v_cm_s - v_prev_cm_s) * 50;
-	v_prev_cm_s = v_cm_s;
+	tk_get_otm(&now);
 
-	/* shift distance history: [0] newest .. [9] oldest */
+	/* shift distance history: [0] newest .. [9] oldest. Only the first
+	 * VLSQ_WINDOW slots feed the velocity estimator below; slots
+	 * VLSQ_WINDOW..FEAT_DIST_HIST-1 are the raw d(t)..d(t-9) feature-
+	 * vector history and are unrelated to it. */
 	for (i = FEAT_DIST_HIST - 1; i > 0; i--)
 		feature_buf[i] = feature_buf[i - 1];
 	feature_buf[0] = d_mm;
+	for (i = VLSQ_WINDOW - 1; i > 0; i--)
+		t_hist_ms[i] = t_hist_ms[i - 1];
+	t_hist_ms[0] = now.lo;
+	if (d_hist_n < VLSQ_WINDOW)
+		d_hist_n++;
+
+	v_cm_s = (W)vlsq_velocity_cm_s(feature_buf, t_hist_ms, (int)d_hist_n);
+
+	/* velocity history feeds the acceleration estimator the same way --
+	 * "a = same estimator over the v history" (design doc, verbatim). */
+	for (i = VLSQ_WINDOW - 1; i > 0; i--) {
+		v_hist_cm_s[i] = v_hist_cm_s[i - 1];
+		vt_hist_ms[i]  = vt_hist_ms[i - 1];
+	}
+	v_hist_cm_s[0] = v_cm_s;
+	vt_hist_ms[0]  = now.lo;
+	if (v_hist_n < VLSQ_WINDOW)
+		v_hist_n++;
+
+	a_cm_s2 = (W)vlsq_accel_cm_s2(v_hist_cm_s, vt_hist_ms, (int)v_hist_n);
 
 	feature_buf[FEAT_IDX_VCLOSE] = v_cm_s;
 	feature_buf[FEAT_IDX_ACCEL]  = a_cm_s2;
