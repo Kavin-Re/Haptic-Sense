@@ -17,10 +17,12 @@ PAT = {
  "DRV": re.compile(r"\[DRV\] init=(-?\d+) id=(\d+) mode=0x(\w+) lib=0x(\w+) seq=0x(\w+) odc=0x(\w+) sts=0x(\w+) armed=(\d+)"),
  "TRG": re.compile(r"\[TRG\] pulses=(\d+) suppressed=(\d+) cyc=(\d+) rst=(\d+) rstmode=0x(\w+)"),
  "HLT": re.compile(r"\[HLT\] polls=(\d+) faults=0x(\w+) cfglost=(\d+)"),
- "EFF": re.compile(r"\[EFF\] n=(\d+) last=(\d+) min=(\d+) max=(\d+) late=(\d+) stuck=(\d+)"),
+ "EFF": re.compile(r"\[EFF\] n=(\d+) last=(\d+) min=(\d+) max=(\d+) late=(\d+) stuck=(\d+)(?: rderr=(\d+))?"),
  "DWT": re.compile(r"\[DWT\] ok=(\d+) cyc=(\d+) cyc_per_ms=(\d+)"),
  "NAK": re.compile(r"\[NAK\] nacks=(\d+)"),
  "TOF": re.compile(r"\[TOF\] res=(-?\d+) step=(\d+) id=0x(\w+) blk=0x(\w+) ctl=0x(\w+)"),
+ "RTY": re.compile(r"\[RTY\] wr=(\d+) wmax=(\d+) wref=(\d+)\s+rd=(\d+) rmax=(\d+) rref=(\d+)"),
+ "RNGF": re.compile(r"\[RNG\] frames=(\d+) last=(\d+) min=(\d+) max=(\d+) nrdy=(\d+) dxfer=(\d+) dstat=(\d+) lst=(\d+) nrdyerr=(\d+) dclr=(\d+)"),
 }
 
 def main():
@@ -47,12 +49,50 @@ def main():
     def check(ok, label, detail=""):
         (notes if ok else fails).append((label, detail))
 
+    # --- continuity (audit section 1.4): a reset mid-run, a multi-minute
+    #     stall, or the same log concatenated twice must all fail, not read
+    #     as "PASS" because the end-of-run totals still look fine. ---
+    ups = [int(g[0]) for g in hb]
+    gaps = [ups[i + 1] - ups[i] for i in range(len(ups) - 1)]
+    check(all(g > 0 for g in gaps),
+          "HB continuity -- up_ms monotonic (no reset/reboot/concat mid-run)",
+          "" if all(g > 0 for g in gaps) else
+          "min gap %d ms -- up_ms went backward or repeated" % (min(gaps) if gaps else 0))
+    check(all(g < 5000 for g in gaps) if gaps else True,
+          "HB continuity -- no stall > 5 s between heartbeats",
+          "" if (all(g < 5000 for g in gaps) if gaps else True) else
+          "max gap %d ms" % max(gaps))
+
     # --- the sticky fault latch: the whole reason drv2605l_poll() exists ---
     faults = {g[1] for g in rows["HLT"]}
     check(faults <= {"0"}, "faults (OC_DETECT | OVER_TEMP), sticky",
           "values seen: " + ", ".join("0x" + f for f in sorted(faults)))
     cfg = {int(g[2]) for g in rows["HLT"]}
     check(cfg <= {0}, "cfglost -- MODE still 0x01", "max %d" % max(cfg or {0}))
+
+    # --- HANDOFF sec4 / code-review sec4: the permanent supply-health
+    #     regression detector. All zero is the VIN-fix proof; nonzero on a
+    #     later run means a supply fault came back, not just "it works".
+    if rows["RTY"]:
+        bad_rty = [g for g in rows["RTY"] if any(int(x) != 0 for x in g)]
+        check(not bad_rty, "RTY write/read retry counters all zero (VIN health)",
+              "%d lines with a nonzero retry counter" % len(bad_rty))
+    else:
+        check(True, "RTY retry counters",
+              "no [RTY] line in this log: pre-Block-2 firmware, check N/A")
+
+    # --- D-A/D-D/D-H (2026-09-03): the BSS-sentinel and guard fixes.
+    #     nrdyerr is a failed data-ready read, dclr a failed ClearInterrupt --
+    #     either freezes frames while looking like normal polling.
+    if rows["RNGF"]:
+        nrdyerr = max(int(g[8]) for g in rows["RNGF"])
+        dclr = max(int(g[9]) for g in rows["RNGF"])
+        check(nrdyerr == 0 and dclr == 0,
+              "RNG nrdyerr/dclr (data-ready read / ClearInterrupt failures)",
+              "nrdyerr max %d, dclr max %d" % (nrdyerr, dclr))
+    else:
+        check(True, "RNG nrdyerr/dclr",
+              "no post-D-D [RNG] frames= line in this log: pre-fix firmware, check N/A")
 
     # --- bus health ---
     errs = [int(g[2]) for g in rows["I2C"]]
@@ -131,10 +171,22 @@ def main():
         late = max(int(g[4]) for g in rows["EFF"]); stk = max(int(g[5]) for g in rows["EFF"])
         check(late == 0 and stk == 0, "EFF late/stuck (playback aborted)",
               "late=%d stuck=%d" % (late, stk))
+        # D-I (2026-09-03): rderr is optional in the regex for backward
+        # compat with pre-D-I logs, where the group is None, not "0".
+        rderr_vals = [int(g[6]) for g in rows["EFF"] if g[6] is not None]
+        if rderr_vals:
+            rderr_max = max(rderr_vals)
+            check(rderr_max == 0, "EFF rderr (I2C read failure during GO poll)",
+                  "max %d" % rderr_max)
+        else:
+            check(True, "EFF rderr",
+                  "no rderr field in this log: pre-D-I firmware, check N/A")
         mn = min(int(g[2]) for g in rows["EFF"]); mx = max(int(g[3]) for g in rows["EFF"])
         floor_ratio = 75000.0 / mx if mx else 0
-        print("  effect duration   %d - %d us   R-3 floor 75 ms = %.3fx the max %s"
-              % (mn, mx, floor_ratio, "(rule needs >= 1.2)" if floor_ratio >= 1.2 else "*** BELOW 1.2 ***"))
+        check(floor_ratio >= 1.2, "R-3 floor (75 ms) >= 1.2x measured max effect duration",
+              "floor/max = %.3fx" % floor_ratio)
+        print("  effect duration   %d - %d us   R-3 floor 75 ms = %.3fx the max"
+              % (mn, mx, floor_ratio))
 
     # --- clock ---
     if rows["DWT"]:
@@ -151,10 +203,20 @@ def main():
     # --- trigger accounting: calls should equal hazard, modulo print skew ---
     if rows["TRG"] and hb:
         n = min(len(rows["TRG"]), len(hb))
-        skew = [abs((int(rows["TRG"][i][0]) + int(rows["TRG"][i][1])) - int(hb[i][3]))
+        # SIGNED skew, not abs() (audit section 4.2): positive skew is benign
+        # print-ordering (the [TRG] line printing before the [HB] line has
+        # caught up), but negative skew means hazard was incremented without
+        # a matching pulse+suppressed -- a genuinely dropped hazard, which
+        # abs() was hiding.
+        skew = [(int(rows["TRG"][i][0]) + int(rows["TRG"][i][1])) - int(hb[i][3])
                 for i in range(n)]
-        check(max(skew) <= 4, "pulses + suppressed == hazard",
-              "worst skew %d (a few frames of print-ordering skew is normal)" % max(skew))
+        neg = [s for s in skew if s < 0]
+        pos_max = max(skew) if skew else 0
+        check(not neg, "pulses + suppressed >= hazard (no dropped hazard)",
+              "%d NEGATIVE-skew samples, worst %d -- indicates a hazard "
+              "pulse the driver never counted" % (len(neg), min(neg)) if neg else "")
+        check(pos_max <= 4, "pulses + suppressed == hazard, positive skew bounded",
+              "worst positive skew %d (print-ordering; historical bound is 4)" % pos_max)
         print("  pulses            %s -> %s     frame rate %.1f Hz"
               % (rows["TRG"][0][0], rows["TRG"][-1][0], fr))
 
