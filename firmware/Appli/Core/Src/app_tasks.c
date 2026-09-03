@@ -449,7 +449,14 @@ static void sensor_task_fct(INT stacd, void *exinf)
 		 * TRIG pulses, and permanently silent after 5 attempts. Rides
 		 * on hazard pulses that fire anyway, so it adds no buzz.
 		 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
-		drv2605l_measure_service();
+		/* D-J (2026-09-03): GATED ON dwt_ok. With CYCCNT frozen (secure
+		 * non-invasive debug is owned by the FSBL under TZEN, so the
+		 * enable can be refused) every sample computes t1 - t0 = 0 and
+		 * the driver records five "valid" measurements of a 0 us
+		 * effect -- from which the R-3 floor derives 0 ms. dwt_ok was
+		 * computed correctly and then read by exactly one print. */
+		if (dwt_ok)
+			drv2605l_measure_service();
 
 		/* DRV2605L health + config validity, ~1 Hz. TK_PRI 3 owns all
 		 * I2C (CLAUDE.md §3), so this is the only context it may run
@@ -598,8 +605,18 @@ static void heartbeat_task_fct(INT stacd, void *exinf)
 			 * again). Non-zero dclr beside a frozen frames= is that exact
 			 * signature, and it is NOT a supply fault -- check [RTY] to tell
 			 * the two apart. */
+			/* D-D (2026-09-03): notready JOINS THE GUARD. It was
+			 * printed but not guarded on, and there is a failure
+			 * state -- already observed on this hardware, CLAUDE.md
+			 * section 8: 0x0030 -> 0x11 and 0x0031 -> 0x03, so
+			 * IntPol = 0 while Temp & 1 = 1 and isDataReady can
+			 * never be set -- in which CheckForDataReady SUCCEEDS
+			 * and reports not-ready. All five original guard terms
+			 * stay 0, the line never prints, and the only counter
+			 * that is moving (notready, ~48/s) is on it. */
 			if (v->frames > 0u || v->drop_xfer > 0u || v->drop_status > 0u ||
-			    v->drop_ready_err > 0u || v->drop_clear > 0u)
+			    v->drop_ready_err > 0u || v->drop_clear > 0u ||
+			    v->notready > 0u)
 				tm_printf((UB *)"[RNG] frames=%u last=%u min=%u max=%u nrdy=%u dxfer=%u dstat=%u lst=%u nrdyerr=%u dclr=%u\n",
 					  v->frames, v->last_mm, v->min_mm, v->max_mm,
 					  v->notready, v->drop_xfer, v->drop_status,
@@ -630,10 +647,13 @@ static void heartbeat_task_fct(INT stacd, void *exinf)
 			 * rise 40-60 ms + brake 5-15 ms). R-3 floor = max x 1.2.
 			 * late/stuck are DISCARDED samples, not measurements. */
 			if (d->eff_n > 0u || d->eff_late > 0u || d->eff_stuck > 0u)
-				tm_printf((UB *)"[EFF] n=%u last=%u min=%u max=%u late=%u stuck=%u\n",
+				/* rderr (D-I) is an I2C failure during the GO
+				 * poll; stuck is the part never finishing.
+				 * Both were one counter until 2026-09-03. */
+				tm_printf((UB *)"[EFF] n=%u last=%u min=%u max=%u late=%u stuck=%u rderr=%u\n",
 					  d->eff_n, d->eff_last_us,
 					  d->eff_min_us, d->eff_max_us,
-					  d->eff_late, d->eff_stuck);
+					  d->eff_late, d->eff_stuck, d->eff_rderr);
 		}
 
 		{	/*

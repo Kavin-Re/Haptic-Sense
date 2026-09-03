@@ -66,7 +66,33 @@ static volatile ER   i2c_xfer_err;
 static volatile BOOL i2c_signalled;
 static volatile BOOL i2c_busy;
 
-static app_i2c_stats_t stats;
+/* Moved up from the L1-probe block below so the initialiser can use it. */
+#define TOF_CTL_NOT_RUN		0x1FFu	/* > 8 bits: cannot collide with a byte */
+
+/*
+ * D-H (2026-09-03). THE SENTINELS MUST BE SET HERE, NOT IN THE PRODUCING
+ * FUNCTIONS. `stats` is a file static, so it lives in BSS and every field
+ * starts at 0 -- and E_OK IS 0. gate_result, gate_wr and tof_result were
+ * assigned their "1 = not run" sentinel INSIDE app_i2c_gate_test(),
+ * drv2605l_write_probe() and app_i2c_tof_probe(), which are exactly the
+ * functions that do not run when app_i2c_init() fails (app_tasks.c).
+ *
+ * The heartbeat then printed, on a board where I2C never came up at all:
+ *     [I2C] gate=0 wr=0 ...      <- reads as "L1 gate passed, writes proven"
+ *     [TOF] res=0 step=0 ctl=0x0 <- three of the five terms of the PASS
+ *                                   signature documented in app_tasks.c
+ * i.e. the failure wore the costume of a pass. Same defect class as the DMA
+ * buffer pre-fill rule in CLAUDE.md section 3, in a new place.
+ *
+ * The in-function assignments are kept: they re-arm the sentinel before each
+ * re-run. This initialiser covers the case where the function never runs.
+ */
+static app_i2c_stats_t stats = {
+	.gate_result = 1,	/* 1 = not run; 0 would read as E_OK */
+	.gate_wr     = 1,
+	.tof_result  = 1,
+	.tof_ctl     = TOF_CTL_NOT_RUN,
+};
 
 /* Gate-test DMA buffer: 32-byte aligned, 32-byte padded (M55 cache line,
  * design §4.1). D-cache is OFF in this build (app_config.h:21) — rule
@@ -786,7 +812,8 @@ void app_i2c_gate_test(void)
 #define TOF_VAL_MODEL_ID	0xEAu
 #define TOF_VAL_MODULE_TYPE	0xCCu
 #define TOF_VAL_MASK_REV	0x10u
-#define TOF_CTL_NOT_RUN		0x1FFu	/* > 8 bits: cannot collide with a byte */
+/* TOF_CTL_NOT_RUN moved to the top of this file, beside the `stats`
+ * initialiser that now needs it (D-H, 2026-09-03). */
 
 void app_i2c_tof_probe(void)
 {

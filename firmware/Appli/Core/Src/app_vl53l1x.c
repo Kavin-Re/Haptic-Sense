@@ -92,7 +92,32 @@
 #define TOF_VHV_WARMUP		0
 #define TOF_VHV_POLL_MAX	40u	/* 40 x 1 ms against a 15 ms budget: 2.6x */
 
-static vl53l1x_stats_t tstats;
+/*
+ * D-A (2026-09-03). E_OK IS 0, AND SO IS BSS.
+ *
+ * init_result's "1 = not run" sentinel used to be assigned inside
+ * vl53l1x_init() -- the one function that does not run in the failure case.
+ * With the 7SEMI absent, app_tasks.c skips the init (correctly: it is gated on
+ * the raw probe) but calls vl53l1x_service() unconditionally, and service's
+ * guard was `if (tstats.init_result != E_OK) return;`. The BSS zero PASSED
+ * that guard, so the frame loop ran against a sensor that was never
+ * configured: every CheckForDataReady NACKed into the shim's 25-attempt retry,
+ * each paced by tk_dly_tsk(1) -- 25-50 ms of delay inside a 20 ms frame
+ * budget, for ever, while [HB] frames kept climbing and [RNG] read init=0,
+ * which app_tasks.c documents as the PASS value.
+ *
+ * Two fixes, because either alone is insufficient: the sentinel is set HERE,
+ * and `tof_running` is a separate flag set ONLY on the success path. A guard
+ * whose "safe" value is zero is a guard that trusts uninitialised memory.
+ */
+static vl53l1x_stats_t tstats = {
+	.init_result = 1,		/* 1 = not run; 0 would read as E_OK */
+	.min_mm      = 0xFFFFFFFFu,
+};
+
+/* Set TRUE only when vl53l1x_init() returned E_OK; the sole gate on the frame
+ * loop. // WRITTEN AND READ FROM PRIORITY 3 SENSOR TASK ONLY */
+static BOOL tof_running = FALSE;
 
 /*
  * ST's default configuration table, written one register at a time by
@@ -427,6 +452,7 @@ ER vl53l1x_init(void)
 {
 	ER err;
 
+	tof_running = FALSE;		/* D-A: no frame loop until THIS run says so */
 	memset(&tstats, 0, sizeof(tstats));
 	tstats.init_result = 1;		/* 1 = not run; 0 would read as E_OK */
 	tstats.min_mm = 0xFFFFFFFFu;
@@ -438,6 +464,7 @@ ER vl53l1x_init(void)
 
 	err = tof_init_inner();
 	tstats.init_result = err;
+	tof_running = (err == E_OK) ? TRUE : FALSE;
 	return err;
 }
 
@@ -466,7 +493,9 @@ void vl53l1x_service(void)
 	UW err_before, err_after;
 	int8_t st;
 
-	if (tstats.init_result != E_OK)
+	/* D-A: gate on the explicit success flag, never on a stats field whose
+	 * zero value is indistinguishable from E_OK. */
+	if (!tof_running)
 		return;
 
 	/*

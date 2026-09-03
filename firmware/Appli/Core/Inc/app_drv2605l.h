@@ -164,7 +164,10 @@ typedef struct {
 	UW	eff_min_us;
 	UW	eff_max_us;
 	UW	eff_late;	/* GO already clear at first poll: DISCARDED */
-	UW	eff_stuck;	/* GO never cleared, or a read failed        */
+	UW	eff_stuck;	/* GO never cleared (D-I: reads no longer here) */
+	UW	eff_rderr;	/* D-I: a GO-poll I2C read failed. Distinct from
+				 * eff_stuck: one is the bus, the other is the
+				 * part never finishing playback.             */
 } drv2605l_stats_t;
 
 const drv2605l_stats_t *drv2605l_get_stats(void);

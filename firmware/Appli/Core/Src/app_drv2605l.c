@@ -41,7 +41,13 @@ static volatile BOOL drv_armed;
 /* Declared here, ABOVE the GPIO and TRIG functions, because both now write
  * to it (pulse_cycles at init, pulses/suppressed at runtime). It used to sit
  * below them, next to the register driver. */
-static drv2605l_stats_t dstats;
+/* D-H (2026-09-03): init_result's sentinel is set HERE. dstats is BSS, and
+ * E_OK is 0, so if drv2605l_init() never runs -- which is exactly what happens
+ * when app_i2c_init() fails -- [DRV] init=0 reads as "configured and armed".
+ * The in-function assignment is kept; it re-arms the sentinel per run. */
+static drv2605l_stats_t dstats = {
+	.init_result = 1,		/* 1 = not run; 0 would read as E_OK */
+};
 
 /* TRIG pulse state. Written ONLY by hazard_task (TK_PRI 1), read only there. */
 static UW   drv_last_pulse_ms;
@@ -70,6 +76,26 @@ static UW drv_cyc_per_us = 800u;	/* 800 MHz until init runs */
  * is needed -- the same argument as drv_armed. */
 static volatile UW   drv_meas_t0;
 static volatile BOOL drv_meas_pending;
+
+/*
+ * D-E (2026-09-03). drv_meas_busy CLOSES THE RE-STAMP WINDOW.
+ *
+ * drv2605l_measure_service() used to clear drv_meas_pending at the TOP of a
+ * ~58 ms poll and increment the sample counters at the BOTTOM, so for the
+ * whole poll both halves of the P1 re-arm condition below were true. P1
+ * preempts P3 by construction, so a second TRIG landing inside the window
+ * re-stamped drv_meas_t0, and the `us` computed at the end -- which read t0
+ * LAST -- measured from the wrong edge and recorded ~3-4 ms as a valid effect
+ * duration, into the counter whose maximum sets DRV_R3_FLOOR_MS.
+ *
+ * The window is real: one sensor frame (20 ms) + the 58.7 ms effect is up to
+ * ~78.7 ms, and the R-3 floor is 75 ms, which hazard_urgency_interval_ms()
+ * returns verbatim at v >= 100 cm/s.
+ *
+ * Two fixes: t0 is latched into a local BEFORE the flag is cleared, and P3
+ * owns drv_meas_busy for the entire poll so P1 cannot re-arm inside it.
+ */
+static volatile BOOL drv_meas_busy;
 
 
 void drv2605l_gpio_init(void)
@@ -171,8 +197,9 @@ BOOL drv2605l_trig_fire(UW want_interval_ms)
 	 * sets GO (Table 5, MODE 1), so it is the only correct t0. Taken
 	 * immediately after the pin goes high and before the spin, so the 2 us
 	 * pulse width is not counted into the effect duration. */
-	if (!drv_meas_pending &&
-	    (dstats.eff_n + dstats.eff_late + dstats.eff_stuck) < DRV_EFF_SAMPLES_MAX) {
+	if (!drv_meas_pending && !drv_meas_busy &&
+	    (dstats.eff_n + dstats.eff_late + dstats.eff_stuck +
+	     dstats.eff_rderr) < DRV_EFF_SAMPLES_MAX) {
 		drv_meas_t0 = DWT->CYCCNT;
 		drv_meas_pending = TRUE;
 	}
@@ -467,14 +494,15 @@ done:
 #define DRV_STATUS_FAULT_MASK	0x03u
 
 /* // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
-void drv2605l_measure_service(void)
+static void drv_measure_once(void)
 {
 	UB   v;
 	UINT i;
-	UW   t1, us;
+	UW   t0, t1, us;
 
-	if (!drv_meas_pending)
-		return;
+	/* D-E: LATCH t0 BEFORE clearing the flag. Reading drv_meas_t0 at the
+	 * end of the poll -- after P1 may have re-stamped it -- was the bug. */
+	t0 = drv_meas_t0;
 	drv_meas_pending = FALSE;	/* one attempt per pulse, always */
 
 	/* Tight poll. This deliberately overruns the 20 ms frame budget for
@@ -484,7 +512,12 @@ void drv2605l_measure_service(void)
 	 * canary cannot trip; it shows only as a brief dip in frame rate. */
 	for (i = 0; i < DRV_EFF_POLL_MAX; i++) {
 		if (drv_rd8(DRV_REG_GO, &v) != E_OK) {
-			dstats.eff_stuck++;
+			/* D-I: a FAILED READ is not a stuck GO bit. These were
+			 * one counter, so "[EFF] stuck=5" could mean five I2C
+			 * failures -- while CLAUDE.md section 8 credits
+			 * "stuck=1" with localising the OC_DETECT incident, a
+			 * diagnosis only valid if stuck means the other thing. */
+			dstats.eff_rderr++;
 			return;
 		}
 		if ((v & DRV_GO_BIT) == 0u)
@@ -508,7 +541,7 @@ void drv2605l_measure_service(void)
 	if (drv_cyc_per_us == 0u)
 		return;
 
-	us = (UW)(t1 - drv_meas_t0) / drv_cyc_per_us;	/* UW: wrap-safe */
+	us = (UW)(t1 - t0) / drv_cyc_per_us;		/* UW: wrap-safe */
 
 	dstats.eff_last_us = us;
 	if (us < dstats.eff_min_us)
@@ -516,6 +549,21 @@ void drv2605l_measure_service(void)
 	if (us > dstats.eff_max_us)
 		dstats.eff_max_us = us;
 	dstats.eff_n++;
+}
+
+/*
+ * D-E: P3 owns drv_meas_busy for the whole measurement window, so the P1 arm
+ * condition cannot re-stamp drv_meas_t0 mid-poll.
+ * // ONLY CALL FROM PRIORITY 3 SENSOR TASK
+ */
+void drv2605l_measure_service(void)
+{
+	if (!drv_meas_pending)
+		return;
+
+	drv_meas_busy = TRUE;
+	drv_measure_once();
+	drv_meas_busy = FALSE;
 }
 
 /* // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
