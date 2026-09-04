@@ -49,6 +49,7 @@
 #include "app_drv2605l.h"
 #include "app_vl53l1x.h"
 #include "app_vl53l1_port.h"
+#include "app_mpu6050.h"
 #include "velocity_lsq.h"
 #include "stm32n6xx_hal.h"
 #include "tk/tkernel.h"
@@ -402,9 +403,21 @@ static void sensor_fill_frame(void)
 
 	feature_buf[FEAT_IDX_VCLOSE] = v_cm_s;
 	feature_buf[FEAT_IDX_ACCEL]  = a_cm_s2;
-	feature_buf[FEAT_IDX_AX] = 0;		/* mg — synthetic IMU at rest */
-	feature_buf[FEAT_IDX_AY] = 0;
-	feature_buf[FEAT_IDX_AZ] = 1000;	/* 1 g */
+
+	/* Block 3: one latched-level poll of the MPU6050 INT pin (design
+	 * doc §4 Option A). NO-OP until mpu6050_init() has armed the
+	 * device -- pre-wire/pre-solder this leaves ax/ay/az at their
+	 * BSS-zeroed 0 mg, not the old "1 g on Z" synthetic stand-in
+	 * (that was a placeholder for the inference model, never a
+	 * physical claim).
+	 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
+	mpu6050_service();
+	{
+		const mpu6050_stats_t *m = mpu6050_get_stats();
+		feature_buf[FEAT_IDX_AX] = m->ax_mg;
+		feature_buf[FEAT_IDX_AY] = m->ay_mg;
+		feature_buf[FEAT_IDX_AZ] = m->az_mg;
+	}
 }
 
 /* Phase 5 L1 bring-up state — writer: sensor_task; reader: heartbeat_task */
@@ -454,6 +467,16 @@ static void sensor_task_fct(INT stacd, void *exinf)
 		 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
 		if (app_i2c_stats()->tof_result == E_OK)
 			(void)vl53l1x_init();
+
+		/* Block 3: MPU6050 IMU bring-up. Independent device address
+		 * from the VL53L1X -- probes for itself (design doc §1)
+		 * rather than reusing app_i2c_gate_test()'s early-break
+		 * result, which never reaches 0x68/0x69 because the
+		 * DRV2605L at 0x5A always ACKs first. Gated only on
+		 * i2c_init_result, not on tof_result -- a missing ToF sensor
+		 * does not imply a missing IMU.
+		 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
+		(void)mpu6050_init();
 	}
 
 	for (;;) {
@@ -695,6 +718,46 @@ static void heartbeat_task_fct(INT stacd, void *exinf)
 					  d->eff_late, d->eff_stuck, d->eff_rderr);
 		}
 
+		{	/* Block 3: MPU6050 IMU bring-up + runtime (design doc
+			 * mpu6050_port_design_v1.md). init=1 means the probe/
+			 * config chain never ran (I2C gate failed, or the part
+			 * is not yet wired); armed=0 with init=E_OK means a
+			 * discriminating readback mismatched its expected
+			 * value -- check pmrb/sr/cfg/acfg/icfg/ien against the
+			 * expected values documented in app_mpu6050.h. gcfg= is
+			 * OBSERVABILITY ONLY (non-discriminating readback, same
+			 * trap as DRV2605L's WAVSEQ1) and is excluded from the
+			 * pass condition. */
+			const mpu6050_stats_t *m = mpu6050_get_stats();
+			tm_printf((UB *)"[IMU] init=%d addr=0x%x who=0x%x rst=%u pmrb0=0x%x pmrb=0x%x sr=%u cfg=%u gcfg=0x%x acfg=0x%x icfg=0x%x ien=0x%x armed=%u\n",
+				  (INT)m->init_result, m->addr7, m->whoami,
+				  m->rst_polls, m->rst_pwrmgmt_rb, m->pwrmgmt_rb,
+				  m->smplrt_rb, m->cfg_rb, m->gyro_cfg_rb,
+				  m->accel_cfg_rb, m->int_cfg_rb, m->int_en_rb,
+				  m->armed);
+			/* stale is DIAGNOSTIC ONLY as of 2026-09-04 -- it no
+			 * longer gates the burst read (mpu6050_service() polls
+			 * unconditionally now; see that function's comment for
+			 * why the INT-gated Option A was dropped). reads should
+			 * therefore climb roughly 1:1 with the heartbeat's own
+			 * loop rate, not the sparse trickle stale implied
+			 * before. rderr is the 14-byte burst read itself
+			 * failing; nonzero deserves the same suspicion as
+			 * [RTY]/[EFF] rderr. */
+			tm_printf((UB *)"[ACC] reads=%u stale=%u rderr=%u ax=%d ay=%d az=%d\n",
+				  m->reads, m->stale, m->rderr,
+				  (INT)m->ax_mg, (INT)m->ay_mg, (INT)m->az_mg);
+			/* pm= is PWR_MGMT_1 read LIVE this call, not the init-time
+			 * snapshot -- expect 0x1. drift= counts polls where it
+			 * was NOT 0x1 (device caught asleep at runtime); nonzero
+			 * confirms the part is browning out / reverting to SLEEP
+			 * after init verified it awake (2026-09-04 finding: 2.43 V
+			 * measured at sensor VCC against the 3.32 V rail). */
+			tm_printf((UB *)"[PWR] pm=0x%x drift=%u rderr=%u\n",
+				  m->pwrmgmt_live_rb, m->pwrmgmt_drift,
+				  m->pwrmgmt_live_rderr);
+		}
+
 		{	/*
 			 * T1 / G-8 — WHICH CLOCK FEEDS DWT->CYCCNT.
 			 *
@@ -832,6 +895,11 @@ static void app_gpio_init(void)
 	 * driven LOW before they become outputs. Do not configure either pin
 	 * here; abs max on both tracks the breakout's VDD (CLAUDE.md §2). */
 	drv2605l_gpio_init();
+
+	/* IMU_INT (PE9, ARD_D3, CN11 pin 4) -- plain input, no pull. See
+	 * app_mpu6050.h: with INT_PIN_CFG's INT_OPEN=0 (push-pull) the
+	 * device drives this line itself. */
+	mpu6050_gpio_init();
 
 #ifdef DEBUG_TIMING
 	/* TIMING_D0 = PH5 (D4), TIMING_D1 = PD6 (D7) — CLAUDE.md §2/§3 */
