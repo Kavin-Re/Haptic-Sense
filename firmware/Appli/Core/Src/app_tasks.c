@@ -134,9 +134,9 @@ static hazard_result_t result_slot;
  *              preempt inference_task mid-read, and inference_task only
  *              reads after data_ready_sem is signalled. IF THAT PRIORITY
  *              RELATION EVER CHANGES, pair this buffer like the result slot.
- *   NO-DMA:    this struct is written by the CPU only (sensor_fill_frame(),
- *              mpu6050_service()'s caller, and eventually vl53l1x_service()'s
- *              caller) -- nothing DMAs into it, on this board or planned.
+ *   NO-DMA:    this struct is written by the CPU only (sensor_fill_frame()
+ *              and its mpu6050_service()/vl53l1x_service() callers) --
+ *              nothing DMAs into it, on this board or planned.
  *              D-cache is off (CLAUDE.md Decision 2); the 32-byte alignment
  *              below is defensive, matching every DMA-touched buffer in the
  *              tree (drv_buf, gate_buf, mpu_buf, port_buf), not a sign this
@@ -147,10 +147,12 @@ static hazard_result_t result_slot;
  *              just-written data the instant D-cache is ever turned on).
  *   VALIDITY:  imu_valid/tof_valid live INSIDE this same protected struct,
  *              never as bare cross-task flags (M-4). imu_valid mirrors
- *              mpu6050_stats_t.last_valid (app_mpu6050.h/.c) each cycle;
- *              tof_valid is hardcoded 0 until Block 4 wires real
- *              vl53l1x_service() distance into feat[0] (currently synthetic
- *              -- see sensor_fill_frame()).
+ *              mpu6050_stats_t.last_valid (app_mpu6050.h/.c) each cycle.
+ *              tof_valid is 1 only on a cycle where vl53l1x_service()
+ *              accepted a genuinely new frame (Block 4, landed 2026-09-05);
+ *              it is 0 both pre-solder/pre-init (synthetic ramp still
+ *              drives feat[0]) and on a real but stale/not-ready poll
+ *              (last accepted distance held over) -- see sensor_fill_frame().
  *
  * feature_buf is kept as a macro so every existing feature_buf[i] call site
  * (sensor_fill_frame(), inference_task_fct()) keeps compiling unchanged.
@@ -158,7 +160,7 @@ static hazard_result_t result_slot;
 typedef struct {
 	W	feat[FEAT_COUNT];
 	UW	imu_valid;	/* mirrors mpu6050_stats_t.last_valid, PH6-1 */
-	UW	tof_valid;	/* 0 until Block 4 wires real ToF distance   */
+	UW	tof_valid;	/* 1 only on a fresh accepted ToF frame, PH6-1 */
 } feature_frame_t;
 
 static feature_frame_t feature_frame __attribute__((aligned(32)));
@@ -374,6 +376,7 @@ static void sensor_fill_frame(void)
 {
 	static W  d_mm = SYN_D_FAR_MM;
 	static W  dir = -1;		/* -1 = approaching, +1 = retreating */
+	static UW tof_frames_seen = 0;	/* last vl53l1x_stats_t.frames consumed */
 	/*
 	 * Least-squares velocity/acceleration replaces the naive two-point
 	 * delta that shipped here (docs/PHASE5_DESIGN_sensor_bringup_i2c.md
@@ -399,9 +402,62 @@ static void sensor_fill_frame(void)
 	SYSTIM now;
 	INT i;
 
-	d_mm += dir * SYN_STEP_MM;
-	if (d_mm <= SYN_D_NEAR_MM) dir = +1;	/* turn around, retreat  */
-	if (d_mm >= SYN_D_FAR_MM)  dir = -1;	/* turn around, approach */
+	/*
+	 * Block 4: real ToF distance, replacing the synthetic ramp once the
+	 * sensor is soldered and vl53l1x_init() has succeeded. Called HERE,
+	 * before the distance-history shift below, so a fresh result (if
+	 * any) lands in THIS cycle's feature_buf[0] -- the same convention
+	 * mpu6050_service() below already uses for accel.
+	 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK
+	 */
+	vl53l1x_service();
+	{
+		const vl53l1x_stats_t *t = vl53l1x_get_stats();
+
+		if (t->init_result == E_OK) {
+			/*
+			 * Real sensor is ranging (D-A: init_result == E_OK is
+			 * the documented "ranging" value, app_vl53l1x.h). A
+			 * fresh, ACCEPTED result exists only when `frames`
+			 * advanced since we last looked here -- frames is the
+			 * ONLY field vl53l1x_service() updates on its fully-
+			 * accepted path (transfer OK AND res.Status == 0).
+			 * last_status is documented as "most recent NON-ZERO
+			 * result.Status" (app_vl53l1x.h) -- it is never reset
+			 * to 0 on a good frame, so == 0 cannot be used as a
+			 * per-cycle freshness signal; frames advancing is the
+			 * only correct one.
+			 */
+			if (t->frames != tof_frames_seen) {
+				tof_frames_seen = t->frames;
+				d_mm = (W)t->last_mm;
+				feature_frame.tof_valid = 1;
+			} else {
+				/* Nothing new this tick (not ready yet, or a
+				 * dropped frame) -- hold d_mm at its last
+				 * accepted value, same discipline as the
+				 * MPU6050 rderr path (app_mpu6050.c). */
+				feature_frame.tof_valid = 0;
+			}
+		} else {
+			/* Pre-solder / pre-init: the same synthetic approach-
+			 * retreat ramp Block 2/3 shipped with, so one binary
+			 * still exercises the whole frame loop with no ToF
+			 * sensor on the bus (same convention as MPU6050's own
+			 * pre-arm fallback). NOTE: if the sensor comes online
+			 * mid-run (vl53l1x_init() succeeds after this task has
+			 * already been looping), the very next accepted frame
+			 * can jump d_mm from wherever the synthetic ramp had
+			 * wandered to the real distance in one step -- an
+			 * expected, one-cycle transient in the velocity/accel
+			 * estimator below, not a bug; it self-clears within
+			 * VLSQ_WINDOW frames like any other history refill. */
+			d_mm += dir * SYN_STEP_MM;
+			if (d_mm <= SYN_D_NEAR_MM) dir = +1;	/* turn around, retreat  */
+			if (d_mm >= SYN_D_FAR_MM)  dir = -1;	/* turn around, approach */
+			feature_frame.tof_valid = 0;
+		}
+	}
 
 	tk_get_otm(&now);
 
@@ -454,12 +510,6 @@ static void sensor_fill_frame(void)
 		feature_frame.imu_valid = m->last_valid;
 	}
 
-	/* PH6-1: distance is still the synthetic ramp above (Block 4 not
-	 * started -- vl53l1x_service() below only proves the frame loop,
-	 * see its call site comment). Hardcode not-valid until that lands,
-	 * rather than leaving inference_task to trust synthetic data as
-	 * real. */
-	feature_frame.tof_valid = 0;
 }
 
 /* Phase 5 L1 bring-up state — writer: sensor_task; reader: heartbeat_task */
@@ -544,15 +594,6 @@ static void sensor_task_fct(INT stacd, void *exinf)
 			stat_dataq_ovr++;	/* queue full: frame dropped */
 
 		stat_frames++;
-
-		/* BLOCK 2 runtime: one ToF frame if one is ready, else an
-		 * immediate return. ~0.5 ms of I2C worst case (2 + 17 + 1
-		 * bytes) inside a 20 ms budget. Self-disables unless
-		 * vl53l1x_init() returned E_OK, so this is inert until the
-		 * sensor is on the bus. Block 4 is where d(t) reaches
-		 * feature_buf; this block only proves the frame loop.
-		 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
-		vl53l1x_service();
 
 		/* HAP-T9 (H-D3): measure real effect-1 duration by timing the
 		 * GO bit. No-op except in the window after one of the first few
