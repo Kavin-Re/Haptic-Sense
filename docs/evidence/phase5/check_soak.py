@@ -28,7 +28,26 @@ PAT = {
 def main():
     if len(sys.argv) < 2: sys.exit("usage: check_soak.py <logfile>")
     rows = {k: [] for k in PAT}
+    seen_first_hb = False
     for line in open(sys.argv[1], errors="replace"):
+        # Discard any tagged line seen before the very first [HB]. A capture
+        # that attaches a fraction of a second late (picocom opening the
+        # port mid-boot) can lose that very first [HB] line while still
+        # catching the rest of that same print block (e.g. [PRT] [RTY] [DRV]
+        # [TRG] [HLT] [IMU] [ACC] [PWR] [DWT] from heartbeat_task's first
+        # loop iteration). That one missing [HB] permanently offsets every
+        # other tag's list by one entry relative to hb[], and any check that
+        # zips two tag lists by index (the pulses+suppressed-vs-hazard check
+        # below) then silently compares each cycle against the PREVIOUS
+        # cycle's counters instead of its own. Found 2026-09-05: a lone
+        # leading [TRG] line produced 146 false "negative skew" (dropped
+        # hazard) reports in an otherwise fully-accounted soak -- verified
+        # by hand against the raw log, not a real drop.
+        if not seen_first_hb:
+            if PAT["HB"].search(line):
+                seen_first_hb = True
+            else:
+                continue
         for k, p in PAT.items():
             m = p.search(line)
             if m: rows[k].append(m.groups())
@@ -202,23 +221,35 @@ def main():
 
     # --- trigger accounting: calls should equal hazard, modulo print skew ---
     if rows["TRG"] and hb:
-        n = min(len(rows["TRG"]), len(hb))
-        # SIGNED skew, not abs() (audit section 4.2): positive skew is benign
-        # print-ordering (the [TRG] line printing before the [HB] line has
-        # caught up), but negative skew means hazard was incremented without
-        # a matching pulse+suppressed -- a genuinely dropped hazard, which
-        # abs() was hiding.
-        skew = [(int(rows["TRG"][i][0]) + int(rows["TRG"][i][1])) - int(hb[i][3])
-                for i in range(n)]
-        neg = [s for s in skew if s < 0]
-        pos_max = max(skew) if skew else 0
-        check(not neg, "pulses + suppressed >= hazard (no dropped hazard)",
-              "%d NEGATIVE-skew samples, worst %d -- indicates a hazard "
-              "pulse the driver never counted" % (len(neg), min(neg)) if neg else "")
-        check(pos_max <= 4, "pulses + suppressed == hazard, positive skew bounded",
-              "worst positive skew %d (print-ordering; historical bound is 4)" % pos_max)
-        print("  pulses            %s -> %s     frame rate %.1f Hz"
-              % (rows["TRG"][0][0], rows["TRG"][-1][0], fr))
+        if len(rows["TRG"]) != len(hb):
+            # The pre-first-HB discard above (2026-09-05) fixes the one
+            # known cause of this; if counts still disagree, something else
+            # dropped or duplicated a line mid-run. Report it and skip the
+            # index-paired comparison rather than silently mis-pairing two
+            # lists that are no longer cycle-for-cycle aligned.
+            check(False, "TRG/HB line counts match (required for skew check)",
+                  "%d [TRG] lines vs %d [HB] lines -- skipping the "
+                  "pulses+suppressed-vs-hazard check, do not trust a skipped "
+                  "check as a PASS" % (len(rows["TRG"]), len(hb)))
+        else:
+            n = len(hb)
+            # SIGNED skew, not abs() (audit section 4.2): positive skew is
+            # benign print-ordering ([TRG] prints after [HB] within the same
+            # heartbeat cycle, so a hazard burst landing between the two
+            # reads shows up here first), negative skew means hazard was
+            # incremented without a matching pulse+suppressed -- a genuinely
+            # dropped hazard, which abs() was hiding.
+            skew = [(int(rows["TRG"][i][0]) + int(rows["TRG"][i][1])) - int(hb[i][3])
+                    for i in range(n)]
+            neg = [s for s in skew if s < 0]
+            pos_max = max(skew) if skew else 0
+            check(not neg, "pulses + suppressed >= hazard (no dropped hazard)",
+                  "%d NEGATIVE-skew samples, worst %d -- indicates a hazard "
+                  "pulse the driver never counted" % (len(neg), min(neg)) if neg else "")
+            check(pos_max <= 4, "pulses + suppressed == hazard, positive skew bounded",
+                  "worst positive skew %d (print-ordering; historical bound is 4)" % pos_max)
+            print("  pulses            %s -> %s     frame rate %.1f Hz"
+                  % (rows["TRG"][0][0], rows["TRG"][-1][0], fr))
 
     print()
     for label, detail in notes:

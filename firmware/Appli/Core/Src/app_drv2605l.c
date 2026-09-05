@@ -171,8 +171,20 @@ BOOL drv2605l_trig_fire(UW want_interval_ms)
 	SYSTIM now;
 	UW iv;
 
-	if (!drv_armed)
-		return FALSE;		/* not configured yet — see the header */
+	if (!drv_armed) {
+		/* Header contract (app_drv2605l.h, drv2605l_trig_fire doc comment)
+		 * already says this returns FALSE "if the call was suppressed by
+		 * the rate limit or the device is not armed" -- group it with the
+		 * rate-limit rejection below under the same counter. Before this
+		 * fix the not-armed case silently returned without touching any
+		 * counter while the caller's stat_hazard_events++ (app_tasks.c) is
+		 * unconditional, so a hazard signal that arrived before init armed
+		 * the driver was counted in `hazard` but never in `pulses` or
+		 * `suppressed` -- a permanent, silent undercount. Found 2026-09-05:
+		 * a 19-event gap at boot in an otherwise fully-accounted soak. */
+		dstats.suppressed++;
+		return FALSE;
+	}
 
 	iv = want_interval_ms;
 	if (iv < DRV_R3_FLOOR_MS)
