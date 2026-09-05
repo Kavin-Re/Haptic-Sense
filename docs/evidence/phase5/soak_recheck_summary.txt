@@ -1,0 +1,13 @@
+=== raw capture: /tmp/soak_recheck_20260904_212916.log ===
+
+=== check_soak.py ===
+no [HB] lines found -- wrong file, or the board was not running
+
+=== NAK line count ===
+0
+
+=== last 5 NAK lines ===
+
+=== any nonzero NAK lines (EMPTY = genuinely clean the whole run) ===
+
+=== FINISHED Friday 04 September 2026 09:39:16 PM IST ===

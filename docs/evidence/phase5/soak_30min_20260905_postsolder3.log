@@ -1,0 +1,648 @@
+[HB] up_ms=2488 frames=92 inf=92 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=1233 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=489 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=95 last=43 min=30 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=1 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=96 stale=96 rderr=0 ax=39 ay=-29 az=1126
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=1914524855 cyc_per_ms=800100
+[HB] up_ms=3588 frames=142 inf=142 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=1535 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=689 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=144 last=37 min=27 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=2 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=146 stale=146 rderr=0 ax=38 ay=-29 az=1126
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=2794880427 cyc_per_ms=800323
+[HB] up_ms=4688 frames=192 inf=192 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=1831 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=889 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=194 last=32 min=27 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=3 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=196 stale=196 rderr=0 ax=39 ay=-28 az=1130
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=3674834095 cyc_per_ms=799957
+[HB] up_ms=5788 frames=242 inf=242 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=2133 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=1089 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=244 last=34 min=27 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=4 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=246 stale=246 rderr=0 ax=39 ay=-29 az=1125
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=259936699 cyc_per_ms=800063
+[HB] up_ms=6888 frames=292 inf=292 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=2435 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=1288 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=294 last=40 min=27 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=5 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=296 stale=296 rderr=0 ax=39 ay=-32 az=1128
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=1139936767 cyc_per_ms=800000
+[HB] up_ms=7988 frames=342 inf=342 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=2737 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=1485 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=344 last=34 min=27 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=6 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=345 stale=345 rderr=0 ax=41 ay=-31 az=1128
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=2019936703 cyc_per_ms=799999
+[HB] up_ms=9088 frames=391 inf=391 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=3039 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=1685 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=394 last=37 min=27 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=7 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=395 stale=395 rderr=0 ax=40 ay=-30 az=1128
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=2900049929 cyc_per_ms=800102
+[HB] up_ms=10188 frames=441 inf=441 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=3335 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=1885 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=443 last=33 min=27 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=8 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=445 stale=445 rderr=0 ax=40 ay=-27 az=1124
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=3780006839 cyc_per_ms=799960
+[HB] up_ms=11288 frames=491 inf=491 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=3637 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=2085 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=493 last=38 min=27 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=9 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=495 stale=495 rderr=0 ax=40 ay=-28 az=1126
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=365039383 cyc_per_ms=799999
+[HB] up_ms=12388 frames=541 inf=541 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=3939 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=2285 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=543 last=27 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=10 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=545 stale=545 rderr=0 ax=41 ay=-31 az=1127
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=1245110101 cyc_per_ms=800064
+[HB] up_ms=13488 frames=591 inf=591 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=4241 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=2481 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=593 last=36 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=11 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=594 stale=594 rderr=0 ax=40 ay=-28 az=1126
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=2125110253 cyc_per_ms=800000
+[HB] up_ms=14588 frames=640 inf=640 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=4543 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=2681 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=643 last=40 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=12 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=644 stale=644 rderr=0 ax=39 ay=-29 az=1124
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=3005247023 cyc_per_ms=800124
+[HB] up_ms=15689 frames=690 inf=690 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=4842 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=2881 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=692 last=31 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=13 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=694 stale=694 rderr=0 ax=40 ay=-29 az=1128
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=3885910121 cyc_per_ms=799875
+[HB] up_ms=16790 frames=740 inf=740 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=5141 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=3081 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=742 last=35 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=14 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=744 stale=744 rderr=0 ax=39 ay=-29 az=1125
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=471742821 cyc_per_ms=799999
+[HB] up_ms=17890 frames=790 inf=790 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=5443 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=3281 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=792 last=36 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=15 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=794 stale=794 rderr=0 ax=44 ay=-29 az=1128
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=1351742865 cyc_per_ms=800000
+[HB] up_ms=18990 frames=840 inf=840 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=5745 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=3478 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=842 last=31 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=16 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=844 stale=844 rderr=0 ax=39 ay=-29 az=1127
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=2231742905 cyc_per_ms=800000
+[HB] up_ms=20090 frames=889 inf=889 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=6047 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=3677 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=892 last=39 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=17 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=893 stale=893 rderr=0 ax=40 ay=-30 az=1127
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=3111783441 cyc_per_ms=800036
+[HB] up_ms=21191 frames=939 inf=939 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=6349 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=3877 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=942 last=40 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=18 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=943 stale=943 rderr=0 ax=40 ay=-29 az=1127
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=3992655261 cyc_per_ms=800065
+[HB] up_ms=22292 frames=989 inf=989 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=6645 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=4077 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=991 last=34 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=19 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=993 stale=993 rderr=0 ax=39 ay=-29 az=1129
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=578375553 cyc_per_ms=799897
+[HB] up_ms=23393 frames=1039 inf=1039 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=6947 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=4277 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1041 last=35 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=20 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1043 stale=1043 rderr=0 ax=41 ay=-29 az=1126
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=1459525579 cyc_per_ms=800317
+[HB] up_ms=24494 frames=1089 inf=1089 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=7249 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=4477 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1091 last=37 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=21 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1093 stale=1093 rderr=0 ax=37 ay=-28 az=1128
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=2340325579 cyc_per_ms=800000
+[HB] up_ms=25595 frames=1139 inf=1139 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=7551 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=4677 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1141 last=40 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=22 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1143 stale=1143 rderr=0 ax=40 ay=-29 az=1125
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=3221125639 cyc_per_ms=800000
+[HB] up_ms=26696 frames=1189 inf=1189 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=7853 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=4873 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1191 last=40 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=23 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1192 stale=1192 rderr=0 ax=37 ay=-30 az=1128
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=4101925463 cyc_per_ms=799999
+[HB] up_ms=27797 frames=1238 inf=1238 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=8155 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=5073 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1241 last=37 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=24 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1242 stale=1242 rderr=0 ax=40 ay=-30 az=1126
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=687894123 cyc_per_ms=800123
+[HB] up_ms=28898 frames=1288 inf=1288 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=8457 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=5273 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1290 last=34 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=25 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1292 stale=1292 rderr=0 ax=38 ay=-30 az=1127
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=1568586651 cyc_per_ms=799902
+[HB] up_ms=29999 frames=1338 inf=1338 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=8753 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=5473 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1340 last=34 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=26 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1342 stale=1342 rderr=0 ax=40 ay=-30 az=1127
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=2449358183 cyc_per_ms=799974
+[HB] up_ms=31100 frames=1388 inf=1388 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=9055 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=5673 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1390 last=40 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=27 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1392 stale=1392 rderr=0 ax=38 ay=-31 az=1126
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=3330158183 cyc_per_ms=800000
+[HB] up_ms=32201 frames=1438 inf=1438 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=9357 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=5873 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1440 last=42 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=28 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1442 stale=1442 rderr=0 ax=39 ay=-29 az=1126
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=4210958183 cyc_per_ms=800000
+[HB] up_ms=33302 frames=1488 inf=1488 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=9659 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=6070 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1490 last=37 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=29 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1492 stale=1492 rderr=0 ax=39 ay=-27 az=1126
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=796790967 cyc_per_ms=800000
+[HB] up_ms=34403 frames=1538 inf=1538 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=9961 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=6269 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1540 last=35 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=30 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1541 stale=1541 rderr=0 ax=40 ay=-30 az=1127
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=1677590967 cyc_per_ms=800000
+[HB] up_ms=35504 frames=1587 inf=1587 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=10263 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=6469 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1590 last=35 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=31 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1591 stale=1591 rderr=0 ax=39 ay=-29 az=1125
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=2558597559 cyc_per_ms=800187
+[HB] up_ms=36605 frames=1637 inf=1637 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=10562 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=6669 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1639 last=28 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=32 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1641 stale=1641 rderr=0 ax=40 ay=-28 az=1124
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=3439260959 cyc_per_ms=799875
+[HB] up_ms=37706 frames=1687 inf=1687 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=10861 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=6869 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1689 last=43 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=33 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1691 stale=1691 rderr=0 ax=37 ay=-30 az=1126
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=25093607 cyc_per_ms=799999
+[HB] up_ms=38807 frames=1737 inf=1737 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=11163 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=7069 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1739 last=38 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=34 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1741 stale=1741 rderr=0 ax=40 ay=-30 az=1128
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=905893639 cyc_per_ms=800000
+[HB] up_ms=39908 frames=1787 inf=1787 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=11465 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=7269 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1789 last=36 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=35 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1791 stale=1791 rderr=0 ax=40 ay=-30 az=1127
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=1786693887 cyc_per_ms=800000
+[HB] up_ms=41009 frames=1837 inf=1837 hazard=4 canary_err=0 q=0 qovr=0
+[I2C] init=0 gate=0 whoami=0x201e0 wr=0 wrseen=0x27 addr=0x5a ok=11767 err=0 tmo=0 recov=0 pclk1=200000000 sysclk=400000000
+[NAK] nacks=0
+[CLK] cpu=800000000 sysb=400000000 pclk1=200000000
+[TOF] res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0
+[RNG] init=0 step=99 id=0xeacc boot=1 calls=93 xerr=0 dm=1 tb=15
+[RNG] osc=41 imp=881 imprb=881 mstart=0x40 cfg=91 cfgfail=0x0 vhv=0 vpolls=0
+[PRT] calls=7465 xerr=0 ler=1 lidx=0x0 perr=0 maxcnt=17 addr8=0x52
+[RTY] wr=0 wmax=0 wref=0  rd=0 rmax=0 rref=0
+[RNG] frames=1839 last=42 min=25 max=100 nrdy=0 dxfer=0 dstat=0 lst=0 nrdyerr=0 dclr=0
+[DRV] init=0 id=7 mode=0x1 lib=0x2 seq=0x1 odc=0x8b sts=0xe0 armed=1
+[TRG] pulses=1 suppressed=3 cyc=1600 rst=1 rstmode=0x40
+[HLT] polls=36 faults=0x0 cfglost=0
+[EFF] n=1 last=58660 min=58660 max=58660 late=0 stuck=0 rderr=0
+[IMU] init=0 addr=0x68 who=0x68 rst=1 pmrb0=0x40 pmrb=0x1 sr=19 cfg=4 gcfg=0x0 acfg=0x8 icfg=0x30 ien=0x1 armed=1
+[ACC] reads=1840 stale=1841 rderr=0 ax=38 ay=-29 az=1126
+[PWR] pm=0x1 drift=0 rderr=0
+[DWT] ok=1 cyc=2667493799 cyc_per_ms=799999

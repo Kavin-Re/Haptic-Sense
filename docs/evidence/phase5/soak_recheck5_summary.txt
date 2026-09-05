@@ -1,0 +1,37 @@
+=== raw capture: /tmp/soak_recheck5_20260905_074935.log ===
+
+=== check_soak.py ===
+====================================================================
+  540 heartbeats over 593.9 s (9.9 min), up_ms 1389 -> 595322
+====================================================================
+  effect duration   58448 - 58533 us   R-3 floor 75 ms = 1.281x the max
+  cyc_per_ms        798905 - 805783  (median 800000)
+  pulses            0 -> 254     frame rate 45.3 Hz
+
+  PASS  HB continuity -- up_ms monotonic (no reset/reboot/concat mid-run) 
+  PASS  HB continuity -- no stall > 5 s between heartbeats 
+  PASS  faults (OC_DETECT | OVER_TEMP), sticky         values seen: 0x0
+  PASS  cfglost -- MODE still 0x01                     max 0
+  PASS  RTY write/read retry counters all zero (VIN health) 0 lines with a nonzero retry counter
+  PASS  RNG nrdyerr/dclr (data-ready read / ClearInterrupt failures) nrdyerr max 0, dclr max 0
+  PASS  I2C bus faults (err - nacks)                   max 0
+  PASS  I2C tmo                                        max 0
+  PASS  VL53L1X L1 probe (0x010F/0x0110 -> EA CC 10, REG8 control) res=0 step=0 id=0xeacc blk=0xeacc10 ctl=0x0 (res=-42 step=1 = no ACK: not soldered, XSHUT, or joints; id/blk 0xa5.. = DMA never wrote; 0xff.. = nothing driving; res=-57 = ACKed then failed, a different problem)
+  PASS  I2C nacks -- every probed device answered (expected 0) max 0; expected 0 (all probed devices should answer)
+  PASS  canary_err (RZ4 torn read)                     max 0
+  PASS  frames == inf lockstep                         0 lines diverged
+  PASS  qovr -- inference never fell behind            max 0
+  PASS  DRV init=0 id=7 mode=0x1 lib=0x2 odc=0x8b armed=1 0 lines off-nominal
+  PASS  rstmode -- DEV_RESET restored defaults         values: 40
+  PASS  EFF late/stuck (playback aborted)              late=0 stuck=0
+  PASS  EFF rderr (I2C read failure during GO poll)    max 0
+  PASS  R-3 floor (75 ms) >= 1.2x measured max effect duration floor/max = 1.281x
+  PASS  DWT ok -- CYCCNT counting                      saw [1]
+  PASS  CPUCLK 800 MHz                                 median 800000 cyc/ms, spread 8598 ppm
+  PASS  pulses + suppressed == hazard, positive skew bounded worst positive skew 0 (print-ordering; historical bound is 4)
+  FAIL  I2C recov                                      max 3
+  FAIL  pulses + suppressed >= hazard (no dropped hazard) 146 NEGATIVE-skew samples, worst -41 -- indicates a hazard pulse the driver never counted
+
+RESULT: 2 CHECK(S) FAILED. Do not solder anything onto this bench.
+
+=== FINISHED Saturday 05 September 2026 07:59:36 AM IST ===
