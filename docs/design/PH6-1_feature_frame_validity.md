@@ -45,7 +45,7 @@ as an unstated assumption).
 
 - `sensor_fill_frame()` (synthetic distance ramp + velocity/acceleration estimate)
 - the MPU6050 accel merge (`mpu6050_get_stats()` → `feature_buf[FEAT_IDX_A{X,Y,Z}]`)
-- (planned, Block 4) the VL53L1X real-distance merge, once `vl53l1x_service()`'s
+- the VL53L1X real-distance merge (landed 2026-09-05, same day as this doc), once `vl53l1x_service()`'s
   result replaces the synthetic ramp
 
 Nothing DMAs into or out of `feature_frame`, on this board or in any planned phase.
@@ -80,7 +80,7 @@ a future maintainer ever adds a cache op nearby without re-reading this doc.
 typedef struct {
 	W	feat[FEAT_COUNT];
 	UW	imu_valid;	/* mirrors mpu6050_stats_t.last_valid, PH6-1 */
-	UW	tof_valid;	/* 0 until Block 4 wires real ToF distance   */
+	UW	tof_valid;	/* 1 only on a fresh accepted ToF frame      */
 } feature_frame_t;
 
 static feature_frame_t feature_frame __attribute__((aligned(32)));
@@ -143,19 +143,35 @@ only — it does not gate the read and does not feed `imu_valid`. If a future bo
 revision or a re-soldered INT line turns out to be reliable, that is a reason to
 revisit this criterion, not a reason it was designed around in the first place.
 
-### 5.2 tof_valid — hardcoded 0 pending Block 4
+### 5.2 tof_valid — real ToF distance, landed same day as this doc
 
-Real ToF distance has not been wired into the frame yet — `sensor_fill_frame()`
-still drives `feat[0]` from the synthetic approach/retreat ramp
-(`d_mm += dir * SYN_STEP_MM`), and `vl53l1x_service()` is called every cycle only
-to "prove the frame loop" per its own call-site comment, with its result not yet
-merged. `feature_frame.tof_valid` is therefore hardcoded to `0` for the whole
-sensor_task loop until that merge lands, so that nothing downstream can
-accidentally treat synthetic data as a real, valid ToF reading. Block 4's job is
-to replace the synthetic ramp with `tstats.last_mm` (comparing `tstats.frames`
-across calls to detect a fresh frame, gating validity on `tstats.last_status == 0`)
-and to set `tof_valid` honestly at that point — this doc's struct and macro do not
-need to change when that happens, only the merge logic that populates the fields.
+`sensor_fill_frame()` now calls `vl53l1x_service()` itself (moved out of the
+main `sensor_task` loop, same call-site convention as `mpu6050_service()`) and
+merges its result the same cycle: when `vl53l1x_stats_t.init_result == E_OK`
+(the sensor is ranging) and `frames` has advanced since the last cycle checked,
+`d_mm` is set from `tstats.last_mm` and `tof_valid = 1`.
+
+**Correction versus this doc's first draft:** the original plan here was to gate
+freshness on `tstats.last_status == 0`. Reading `vl53l1x_service()`'s actual body
+(`app_vl53l1x.c`) before implementing this showed that assumption was wrong —
+`last_status`'s own field comment says "most recent NON-ZERO result.Status": it
+is only ever written on the drop-status path and is never reset to 0 on a good
+frame, so it cannot distinguish a fresh good frame from an old one. `frames` is
+the only field the accepted path updates, so comparing it against a per-cycle
+last-seen value is the correct (and only) freshness signal. Implemented that way
+instead — see the landing commit's message for the full note.
+
+When `init_result == E_OK` but `frames` has NOT advanced this cycle (not ready
+yet, or a dropped frame), `d_mm` is held over at its last accepted value and
+`tof_valid = 0` — same discipline as the MPU6050 rderr hold-over path. When
+`init_result != E_OK` (pre-solder / pre-init), the original synthetic
+approach/retreat ramp still drives `d_mm` unchanged, and `tof_valid = 0`, so
+nothing downstream can mistake synthetic data for a real, valid ToF reading.
+
+One noted, self-clearing transient: if the sensor comes online mid-run, the
+first accepted frame can jump `d_mm` in one step from wherever the synthetic
+ramp had wandered to. This is expected — it clears within `VLSQ_WINDOW` frames
+like any other history refill, the same way MPU6050 arming mid-run does.
 
 ## 6. What PH6-1 explicitly does not do
 
@@ -170,15 +186,18 @@ populated honestly by the producer — consuming it is scoped separately.
 ## 7. Verification
 
 - Manual review: struct layout, macro expansion at every `feature_buf[i]` call
-  site, and brace/paren balance across the three touched files
-  (`app_tasks.c`, `app_mpu6050.c`, `app_mpu6050.h`) — checked clean.
+  site, single (not duplicated) `vl53l1x_service()` call site, and brace/paren
+  balance across all four touched files (`app_tasks.c`, `app_mpu6050.c`,
+  `app_mpu6050.h`, this doc's own two landing commits) — checked clean.
 - No cross-compiler is available in this working environment to produce a binary
   build check; `arm-none-eabi-gcc` build via STM32CubeIDE (or the project's own
   toolchain) on the actual dev machine is the outstanding verification step
   before this is soaked on hardware.
-- Functional/soak verification of `imu_valid` (does it actually read 0 during a
-  forced-sleep or read-failure window, and 1 otherwise) is deferred to the same
-  soak pass, once the build is confirmed.
+- Functional/soak verification deferred to that same build-confirmed pass:
+  `imu_valid` should read 0 during a forced-sleep or read-failure window and 1
+  otherwise; `tof_valid` should read 1 only on cycles where `d(t)` actually
+  moved by a real accepted frame, and `frames`/`d(t)`/`tof_valid` should all
+  advance together once the ToF sensor is soldered and initialized.
 
 ## 8. Sources
 
