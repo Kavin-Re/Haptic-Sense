@@ -123,14 +123,46 @@ typedef struct {
 static hazard_result_t result_slot;
 
 /*
- * Feature buffer — written by sensor_task (P3), read by inference_task (P2).
- * SAFE WITHOUT ITS OWN LOCK because the producer's priority (3) is LOWER
- * than the consumer's (2): sensor_task can never preempt inference_task
- * mid-read, and inference_task only reads after data_ready_sem is signalled.
- * IF THAT PRIORITY RELATION EVER CHANGES, pair this buffer like the result
- * slot. Phase 5's I2C DMA completion path must write through THIS buffer.
+ * Feature frame — written by sensor_task (P3), read by inference_task (P2).
+ * Formalized under PH6-1 (docs/design/PH6-1_feature_frame_validity.md),
+ * closing audit findings F-6d and M-4:
+ *
+ *   OWNER:     sensor_task (P3) is the sole writer; inference_task (P2) is
+ *              the sole reader.
+ *   PROTECTION: SAFE WITHOUT ITS OWN LOCK because the producer's priority
+ *              (3) is LOWER than the consumer's (2): sensor_task can never
+ *              preempt inference_task mid-read, and inference_task only
+ *              reads after data_ready_sem is signalled. IF THAT PRIORITY
+ *              RELATION EVER CHANGES, pair this buffer like the result slot.
+ *   NO-DMA:    this struct is written by the CPU only (sensor_fill_frame(),
+ *              mpu6050_service()'s caller, and eventually vl53l1x_service()'s
+ *              caller) -- nothing DMAs into it, on this board or planned.
+ *              D-cache is off (CLAUDE.md Decision 2); the 32-byte alignment
+ *              below is defensive, matching every DMA-touched buffer in the
+ *              tree (drv_buf, gate_buf, mpu_buf, port_buf), not a sign this
+ *              buffer needs cache maintenance -- it does not, which is why
+ *              the SCB_InvalidateDCache_by_Addr() call formerly issued on it
+ *              in sensor_task's loop was removed (audit §3.3: an invalidate
+ *              without writeback on a CPU-only-written buffer would discard
+ *              just-written data the instant D-cache is ever turned on).
+ *   VALIDITY:  imu_valid/tof_valid live INSIDE this same protected struct,
+ *              never as bare cross-task flags (M-4). imu_valid mirrors
+ *              mpu6050_stats_t.last_valid (app_mpu6050.h/.c) each cycle;
+ *              tof_valid is hardcoded 0 until Block 4 wires real
+ *              vl53l1x_service() distance into feat[0] (currently synthetic
+ *              -- see sensor_fill_frame()).
+ *
+ * feature_buf is kept as a macro so every existing feature_buf[i] call site
+ * (sensor_fill_frame(), inference_task_fct()) keeps compiling unchanged.
  */
-static W feature_buf[FEAT_COUNT];
+typedef struct {
+	W	feat[FEAT_COUNT];
+	UW	imu_valid;	/* mirrors mpu6050_stats_t.last_valid, PH6-1 */
+	UW	tof_valid;	/* 0 until Block 4 wires real ToF distance   */
+} feature_frame_t;
+
+static feature_frame_t feature_frame __attribute__((aligned(32)));
+#define feature_buf	(feature_frame.feat)
 
 /* Paired semaphores (Red Zone #4) — created BEFORE any tk_sta_tsk */
 static ID data_ready_sem;	/* init 0: sensor_task(P)    -> inference_task(C) */
@@ -417,7 +449,17 @@ static void sensor_fill_frame(void)
 		feature_buf[FEAT_IDX_AX] = m->ax_mg;
 		feature_buf[FEAT_IDX_AY] = m->ay_mg;
 		feature_buf[FEAT_IDX_AZ] = m->az_mg;
+		/* PH6-1: validity travels inside the protected frame, not as a
+		 * bare flag (M-4) -- mirror this cycle's mpu6050 verdict. */
+		feature_frame.imu_valid = m->last_valid;
 	}
+
+	/* PH6-1: distance is still the synthetic ramp above (Block 4 not
+	 * started -- vl53l1x_service() below only proves the frame loop,
+	 * see its call site comment). Hardcode not-valid until that lands,
+	 * rather than leaving inference_task to trust synthetic data as
+	 * real. */
+	feature_frame.tof_valid = 0;
 }
 
 /* Phase 5 L1 bring-up state — writer: sensor_task; reader: heartbeat_task */
@@ -482,11 +524,17 @@ static void sensor_task_fct(INT stacd, void *exinf)
 	for (;;) {
 		sensor_fill_frame();
 
-		/* Cache maintenance (CLAUDE.md §3) — placed NOW, exercised in
-		 * Phase 5. Harmless on CPU-written synthetic data; MANDATORY on
-		 * the I2C DMA path. Kept from day 1 so Phase 5 cannot forget it.
+		/* No cache maintenance here (PH6-1, audit §3.3, reversing the
+		 * Phase 4-era comment this replaces). feature_frame is CPU-only
+		 * written (no DMA owner, ever -- see the struct comment above);
+		 * an unconditional SCB_InvalidateDCache_by_Addr() on it used to
+		 * sit here, which would discard just-written, not-yet-flushed
+		 * data the moment D-cache is turned on (currently off, CLAUDE.md
+		 * Decision 2, so this was dormant, not yet a live bug). Phase 5's
+		 * actual DMA buffers (mpu_buf, port_buf, gate_buf, drv_buf) each
+		 * carry their own correct cache maintenance at their own call
+		 * sites -- this buffer needs none.
 		 * // ONLY CALL FROM PRIORITY 3 SENSOR TASK */
-		SCB_InvalidateDCache_by_Addr((uint32_t *)feature_buf, sizeof(feature_buf));
 
 		/* producer: sensor_task(P) -> data_ready_sem -> inference_task(C).
 		 * Counting semaphore: backlog growth = inference overload canary

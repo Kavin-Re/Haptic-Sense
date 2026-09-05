@@ -61,7 +61,8 @@
  * same rule DRV_BUF/GATE_BUF follow). 32 bytes covers the 14-byte burst with
  * room to spare; nothing here is a DMA destination touched by any other
  * task, so no SCB cache-maintenance call belongs on this buffer (the RZ9-
- * adjacent mistake app_tasks.c:427 made on feature_buf, D-cache section). */
+ * adjacent mistake app_tasks.c used to make on feature_buf's D-cache
+ * call, removed under PH6-1, 2026-09-05). */
 static UB mpu_buf[32] __attribute__((aligned(32)));
 
 /* D-H-class sentinel: BSS-zeroed, and E_OK is 0, so init_result must be set
@@ -312,9 +313,12 @@ done:
 void mpu6050_service(void)
 {
 	W  ax_raw, ay_raw, az_raw;
+	UW awake_now = 0;	/* PH6-1: live PWR_MGMT_1 re-check said awake THIS cycle */
 
-	if (!mstats.armed)
+	if (!mstats.armed) {
+		mstats.last_valid = 0;	/* PH6-1: no device, no valid sample */
 		return;
+	}
 
 	/* Live PWR_MGMT_1 re-check (2026-09-04). See the field comment on
 	 * pwrmgmt_live_rb in app_mpu6050.h -- init only proves wake ONCE, at
@@ -329,6 +333,8 @@ void mpu6050_service(void)
 			mstats.pwrmgmt_live_rb = (UW)pm;
 			if (pm != MPU_PWR_WAKE_PLL_XG)
 				mstats.pwrmgmt_drift++;	/* device is asleep right now */
+			else
+				awake_now = 1;		/* PH6-1 validity input */
 		} else {
 			mstats.pwrmgmt_live_rderr++;
 		}
@@ -365,6 +371,7 @@ void mpu6050_service(void)
 	if (i2c_rd(mpu_addr7, (UW)MPU_REG_ACCEL_XOUT_H, I2C_REG8,
 		   mpu_buf, 14) != E_OK) {
 		mstats.rderr++;		/* leave ax/ay/az at their last value */
+		mstats.last_valid = 0;	/* PH6-1: stale hold-over, not a fresh sample */
 		return;
 	}
 
@@ -382,6 +389,10 @@ void mpu6050_service(void)
 	mstats.az_mg = (az_raw * 1000) / MPU_ACCEL_LSB_PER_G;
 
 	mstats.reads++;
+	/* PH6-1: fresh sample AND confirmed-awake this cycle -- see the
+	 * field comment on last_valid (app_mpu6050.h) for why this is not
+	 * gated on INT/DATA_RDY. */
+	mstats.last_valid = awake_now;
 }
 
 const mpu6050_stats_t *mpu6050_get_stats(void)

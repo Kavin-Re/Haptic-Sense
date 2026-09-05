@@ -181,15 +181,17 @@ Integer form for TK_PRI 3 (no float dependency): `mg = ((int32_t)raw * 1000) / 8
 ## 7. WHAT THIS DOC DOES *NOT* COVER
 Sensor-fusion timing between ToF and IMU inside the 20 ms frame (belongs to the pipeline-integration doc once both sensors have first light); MPU6050 motion-interrupt/DMP features (DMP explicitly out of scope — NPU does the inference, and DMP would add an undocumented firmware dependency); temp compensation.
 
-**Binding constraint recorded, not designed (audit M-4, 2026-07-11):** §4 Option A's
-stale-IMU-frame indicator ("if INT low, mark frame stale, reuse last sample, fall to
-12-feature vector") currently has no specified transport across P3→P2 — that handoff is
-Phase 6 scope, not this doc's. The constraint Phase 6 inherits: **the staleness
-indicator MUST travel inside the semaphore-protected P3→P2 feature-frame buffer (e.g. a
-validity field in the frame struct), never as a bare cross-task flag** — a bare flag
-would be an F-1-class unprotected shared-state race (see `drv2605l_port_design_v1.md`
-§2, R-EN-3/R-EN-4: the same lost-update shape, config-invalid flag vs readback-verify).
-Closes M-4 together with F-6d at Phase 6 handoff design.
+**CLOSED 2026-09-05 — see `PH6-1_feature_frame_validity.md`.** §4 Option A's
+stale-IMU-frame indicator was originally specified as "if INT low, mark frame stale" —
+PH6-1's actual implementation does NOT gate on INT/DATA_RDY (found unreliable on this
+board this session, see that doc §5.1) and instead gates on armed + read-success + a
+live PWR_MGMT_1 awake re-check. The transport constraint recorded here (staleness/
+validity must travel inside the semaphore-protected P3→P2 feature-frame buffer, never
+a bare cross-task flag — the F-1-class risk `drv2605l_port_design_v1.md` §2's
+R-EN-3/R-EN-4 named by analogy) is what PH6-1 implements: `feature_frame_t` carries
+`imu_valid`/`tof_valid` fields alongside `feat[]` in the same protected struct. Closed
+M-4 together with F-6d — see `PH6-1_feature_frame_validity.md` for the full spec and
+`PROJECT_DEFENSE.md`'s ledger for status.
 
 ## 8. VERIFICATION LEDGER
 

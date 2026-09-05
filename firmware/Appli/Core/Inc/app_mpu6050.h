@@ -90,6 +90,18 @@ typedef struct {
 	UW	pwrmgmt_live_rb;	/* live 0x6B readback; != 0x01 means asleep */
 	UW	pwrmgmt_drift;		/* count of times it was != 0x01 (SLEEP seen) */
 	UW	pwrmgmt_live_rderr;	/* the live check's own i2c_rd failed */
+
+	/* PH6-1 (docs/design/PH6-1_feature_frame_validity.md): validity
+	 * transport for THIS cycle's ax/ay/az sample, read by sensor_task
+	 * and copied into the protected feature_frame_t.imu_valid field
+	 * (never passed as a bare cross-task flag -- M-4). Deliberately NOT
+	 * gated on the INT/DATA_RDY pin: that pin stopped asserting after
+	 * ~120 samples on this board while the sensor kept producing good
+	 * data (see the note above mpu6050_service()'s INT poll). Gated
+	 * instead on what this session actually validated as reliable:
+	 * armed, this burst read succeeded, and the live PWR_MGMT_1
+	 * re-check confirms the part is awake THIS cycle. */
+	UW	last_valid;
 } mpu6050_stats_t;
 
 /* Configure PE9 (IMU_INT, ARD_D3, CN11 pin 4) as a plain input, no pull --

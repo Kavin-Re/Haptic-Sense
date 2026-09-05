@@ -427,7 +427,7 @@ night. The report text's "F-1 and F-4 remain the open high-severity items" is **
 | F-6a | med (latent) | Write-side D-cache clean absent from primitive | **OPEN-LATENT** → L1-10; fires at D-cache enable (§2.2) |
 | F-6b | med (latent) | ULD unaligned `Temp[17]` vs invalidate | **OPEN-LATENT** → TOF-13; same milestone |
 | F-6c | med (latent) | DRV doc has no buffer-alignment rule | **FIXED 2026-07-12** (Appendix A item A-3) — `drv_buf[32]` aligned rule added to DRV §4; hoist-into-primitive alternative remains an open decision; latent-defect *code* work still lands at D-cache enable (HAP-8) |
-| F-6d | med | P3→P2 feature-handoff buffer unspecified | **OPEN-DEFERRED** → PH6-1; constraint recorded (MPU doc §7, `f804281`) |
+| F-6d | med | P3→P2 feature-handoff buffer unspecified | **CLOSED 2026-09-05** — `PH6-1_feature_frame_validity.md`; `feature_frame_t` w/ `imu_valid`/`tof_valid` |
 | F-7 | med | IN/TRIG configure-low-before-arm ordering not an explicit rule | **FIXED 2026-07-12** (Appendix A item A-4) — ordering rule merged into DRV R-EN-1 |
 | F-8 | low | DEV_RESET poll budget in wall-clock ms, incompatible with ~145 ms failure envelope | **FIXED 2026-07-12** (Appendix A item A-5) — DRV §4 row 0 respecified ≤5 attempts, matching the M-2 fix |
 | F-9 | low | I2C wedge in power-on standby window unrecoverable by EN-toggle | **FIXED 2026-07-12** (Appendix A item A-6) — note added to DRV §6.2; bench only if observed |
@@ -436,7 +436,7 @@ night. The report text's "F-1 and F-4 remain the open high-severity items" is **
 | M-1 | high | ±4 g paired with 4096 LSB/g (correct: 8192) | **FIXED** (`58753d2`) — CLAUDE.md §2 corrected with RM §4.18 cite; residual "grep docs for stray 4096" not evidenced as run → DOC-1 |
 | M-2 | low-med | MPU DEVICE_RESET poll unbounded/unpaced | **FIXED** (`f804281`) — MPU doc §3 row 1: ≤5 attempts, `tk_dly_tsk(1)` pacing, fail loudly |
 | M-3 | low | `tk_wup_tsk` vs `tk_sig_sem` — two ISR→P3 wake mechanisms | **FIXED** (`f804281`) — standardized `tk_sig_sem`, recorded CLAUDE.md §3 + MPU doc §4 Option B |
-| M-4 | med | Stale-IMU-frame indicator transport unspecified | **OPEN-DEFERRED** → PH6-1 (constraint recorded, MPU doc §7); closes with F-6d |
+| M-4 | med | Stale-IMU-frame indicator transport unspecified | **CLOSED 2026-09-05** together with F-6d — `PH6-1_feature_frame_validity.md`; NOT gated on INT (found unreliable this board) |
 
 ### 3.2 Verification ledger — every open, closeable, and recently-closed item
 
@@ -522,7 +522,7 @@ edit (requires Kavin's approval per Appendix A) · **hardware** = bench/LA/meter
 
 | ID | Old ID(s) | Item | Closure step | Gate | Status / Blocks |
 |---|---|---|---|---|---|
-| PH6-1 | audit F-6d + M-4 | P3→P2 feature-frame handoff spec: buffer owner, alignment, no-DMA statement, **validity field inside the protected buffer** (never a bare flag) | Write it into the Phase 6 design; review against §2.3 before any task-body code | doc | OPEN / **BLOCKS Phase 6 implementation start** |
+| PH6-1 | audit F-6d + M-4 | P3→P2 feature-frame handoff spec: buffer owner, alignment, no-DMA statement, **validity field inside the protected buffer** (never a bare flag) | Written `PH6-1_feature_frame_validity.md`; `app_tasks.c`/`app_mpu6050.{c,h}` implement it | doc+code | **CLOSED 2026-09-05** — build-verify on hardware still outstanding (no cross-compiler in this working environment); Phase 6 implementation start unblocked |
 | PH6-2 | §2.1 | NPU `inference_ms` baseline recorded + heartbeat assert | First NPU run after verify order | hardware | OPEN / Phase 6 |
 | PH6-3 | §2.4 item 4 | Re-run preemption campaign under NPU load before contest claims | Existing Phase 4 method (`docs/evidence/phase4/`) | hardware | OPEN / **blocks contest latency claim** |
 | DOC-1 | addendum M-1 residual | Sweep docs for stray "4096" transplants | `grep -rn "4096" docs/ CLAUDE.md` and check each hit against RM §4.18 | desk | OPEN (audit named it; not evidenced as run) |
