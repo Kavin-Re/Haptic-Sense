@@ -63,6 +63,23 @@ ER app_i2c_init(void);
 ER i2c_rd(UB dev7, UW reg, UINT regsz, UB *buf, UW len);
 ER i2c_wr(UB dev7, UW reg, UINT regsz, const UB *buf, UW len);
 
+/*
+ * Runtime variants of i2c_rd()/i2c_wr(), for a device already confirmed
+ * present and armed (post-init periodic reads/writes only -- NOT boot-time
+ * discovery/probing via app_i2c_gate_test() or the MPU6050 AD0 candidate
+ * scan). These retry once on E_NOEXS in addition to i2c_rd()/i2c_wr()'s
+ * existing E_TMOUT/E_IO retry, because a NACK from a device that IS on the
+ * bus (per its own successful init) is far more likely a transient
+ * contact/margin glitch than a genuinely absent part -- confirmed
+ * 2026-09-05 (docs/evidence/phase5/PHASE5_I2C_TWISTED_JOINT_20260905.md §4,
+ * adversarial review 2.6): the one MPU6050 read that actually lost data in
+ * a 30-minute soak took exactly the E_NOEXS/no-retry path. Boot-time probes
+ * keep using i2c_rd()/i2c_wr() unchanged -- an absent device there is
+ * expected and a retry would only cost time (app_i2c.c COST NOTE).
+ */
+ER i2c_rd_rt(UB dev7, UW reg, UINT regsz, UB *buf, UW len);
+ER i2c_wr_rt(UB dev7, UW reg, UINT regsz, const UB *buf, UW len);
+
 /* MANDATORY GATE (review requirement 2026-07-06): standalone L1 DMA proof —
  * a single register read (MPU6050 WHO_AM_I, trying 0x68 then 0x69) BEFORE any
  * L2/ULD code exists. Result lands in stats; heartbeat prints it. */

@@ -395,10 +395,18 @@ static void sensor_fill_frame(void)
 	 * ran slower than nominal.
 	 */
 	static UW t_hist_ms[VLSQ_WINDOW];
+	static W  d_vlsq_hist[VLSQ_WINDOW];	/* fresh-only distance samples that
+					 * feed the velocity regression --
+					 * decoupled from feature_buf's raw
+					 * d(t)..d(t-9) history, which still
+					 * holds over unconditionally. See
+					 * the tof_valid gate below (2026-09-05
+					 * adversarial review §2.5). */
 	static W  v_hist_cm_s[VLSQ_WINDOW];
 	static UW vt_hist_ms[VLSQ_WINDOW];
 	static INT d_hist_n = 0, v_hist_n = 0;
-	W v_cm_s, a_cm_s2;
+	static W  v_cm_s = 0, a_cm_s2 = 0;	/* static: hold over, do not recompute,
+					 * on a cycle where tof_valid == 0 */
 	SYSTIM now;
 	INT i;
 
@@ -461,34 +469,57 @@ static void sensor_fill_frame(void)
 
 	tk_get_otm(&now);
 
-	/* shift distance history: [0] newest .. [9] oldest. Only the first
-	 * VLSQ_WINDOW slots feed the velocity estimator below; slots
-	 * VLSQ_WINDOW..FEAT_DIST_HIST-1 are the raw d(t)..d(t-9) feature-
-	 * vector history and are unrelated to it. */
+	/* Raw d(t)..d(t-9) feature-vector history: unconditional, holds over
+	 * on an invalid ToF cycle exactly like every other held feature
+	 * (PH6-1) -- this is a display/ML-feature concern, separate from the
+	 * velocity-regression window below. */
 	for (i = FEAT_DIST_HIST - 1; i > 0; i--)
 		feature_buf[i] = feature_buf[i - 1];
 	feature_buf[0] = d_mm;
-	for (i = VLSQ_WINDOW - 1; i > 0; i--)
-		t_hist_ms[i] = t_hist_ms[i - 1];
-	t_hist_ms[0] = now.lo;
-	if (d_hist_n < VLSQ_WINDOW)
-		d_hist_n++;
 
-	v_cm_s = (W)vlsq_velocity_cm_s(feature_buf, t_hist_ms, (int)d_hist_n);
+	/* Velocity-regression window: gated on tof_valid, NOT unconditional.
+	 * 2026-09-05 adversarial review §2.5: pushing a held/repeated d_mm
+	 * here pairs an unchanged distance with a genuinely advancing
+	 * timestamp -- a flat segment the timestamped LSQ estimator cannot
+	 * tell apart from the target truly not moving, dragging the fitted
+	 * slope toward zero. That is RISK G-7's failure direction
+	 * (under-reporting closing velocity -- missing a hazard, not seeing
+	 * one that isn't there) reached by a mechanism G-7 never described.
+	 * On a held cycle: push nothing into d_vlsq_hist/t_hist_ms, and skip
+	 * recomputing v_cm_s/a_cm_s2 entirely -- they hold over at their
+	 * static previous value. vlsq_*() already takes explicit timestamps,
+	 * so next time a fresh sample arrives the window simply spans a
+	 * longer real interval; no flat segment is ever injected. Same gate
+	 * extends to the v-history/acceleration regression one level up,
+	 * for the identical reason. */
+	if (feature_frame.tof_valid) {
+		for (i = VLSQ_WINDOW - 1; i > 0; i--) {
+			d_vlsq_hist[i] = d_vlsq_hist[i - 1];
+			t_hist_ms[i]   = t_hist_ms[i - 1];
+		}
+		d_vlsq_hist[0] = d_mm;
+		t_hist_ms[0]   = now.lo;
+		if (d_hist_n < VLSQ_WINDOW)
+			d_hist_n++;
 
-	/* velocity history feeds the acceleration estimator the same way --
-	 * "a = same estimator over the v history" (design doc, verbatim). */
-	for (i = VLSQ_WINDOW - 1; i > 0; i--) {
-		v_hist_cm_s[i] = v_hist_cm_s[i - 1];
-		vt_hist_ms[i]  = vt_hist_ms[i - 1];
+		v_cm_s = (W)vlsq_velocity_cm_s(d_vlsq_hist, t_hist_ms, (int)d_hist_n);
+
+		/* velocity history feeds the acceleration estimator the same way --
+		 * "a = same estimator over the v history" (design doc, verbatim). */
+		for (i = VLSQ_WINDOW - 1; i > 0; i--) {
+			v_hist_cm_s[i] = v_hist_cm_s[i - 1];
+			vt_hist_ms[i]  = vt_hist_ms[i - 1];
+		}
+		v_hist_cm_s[0] = v_cm_s;
+		vt_hist_ms[0]  = now.lo;
+		if (v_hist_n < VLSQ_WINDOW)
+			v_hist_n++;
+
+		a_cm_s2 = (W)vlsq_accel_cm_s2(v_hist_cm_s, vt_hist_ms, (int)v_hist_n);
 	}
-	v_hist_cm_s[0] = v_cm_s;
-	vt_hist_ms[0]  = now.lo;
-	if (v_hist_n < VLSQ_WINDOW)
-		v_hist_n++;
 
-	a_cm_s2 = (W)vlsq_accel_cm_s2(v_hist_cm_s, vt_hist_ms, (int)v_hist_n);
-
+	/* held-over v_cm_s/a_cm_s2 (static) on an invalid-ToF cycle -- same
+	 * hold discipline as feature_buf[0] above and the MPU6050 rderr path */
 	feature_buf[FEAT_IDX_VCLOSE] = v_cm_s;
 	feature_buf[FEAT_IDX_ACCEL]  = a_cm_s2;
 

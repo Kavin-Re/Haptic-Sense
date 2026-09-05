@@ -496,7 +496,8 @@ static ER i2c_xfer_once(BOOL is_read, UB dev7, UW reg, UINT regsz, UB *buf, UW l
  * requirement 2026-07-06).
  * // ONLY CALL FROM PRIORITY 3 SENSOR TASK
  */
-static ER i2c_xfer(BOOL is_read, UB dev7, UW reg, UINT regsz, UB *buf, UW len)
+static ER i2c_xfer(BOOL is_read, UB dev7, UW reg, UINT regsz, UB *buf, UW len,
+		    BOOL retry_noexs)
 {
 	ER err;
 
@@ -511,12 +512,27 @@ static ER i2c_xfer(BOOL is_read, UB dev7, UW reg, UINT regsz, UB *buf, UW len)
 
 	err = i2c_xfer_once(is_read, dev7, reg, regsz, buf, len);
 	if (err == E_NOEXS) {
-		/* The device did not ACK. The bus is healthy and the next
-		 * address will work, so NO recovery and NO retry: a retry
-		 * only doubles the cost of an absent part and a recovery
-		 * makes `recoveries` mean two different things at once.
-		 * See HAL_I2C_ErrorCallback above for why this is safe to
-		 * distinguish. */
+		/* The device did not ACK. For a boot-time probe (retry_noexs
+		 * == FALSE) the bus is healthy and the next address will
+		 * work, so NO recovery and NO retry: a retry only doubles
+		 * the cost of an absent part and a recovery makes
+		 * `recoveries` mean two different things at once. See
+		 * HAL_I2C_ErrorCallback above for why this is safe to
+		 * distinguish.
+		 *
+		 * For a runtime caller of an already-confirmed-present
+		 * device (retry_noexs == TRUE, via i2c_rd_rt()/i2c_wr_rt()),
+		 * that reasoning does not transfer: the device IS there, so
+		 * a NACK is far more likely a transient contact/margin
+		 * glitch than absence, and there is no "try the next
+		 * address" fallback once armed and running -- confirmed
+		 * 2026-09-05, see app_i2c.h's doc comment on i2c_rd_rt().
+		 * Still deliberately NO bus recovery here even on retry: the
+		 * bus itself is healthy in this case, and calling
+		 * i2c1_bus_recover() would make `recoveries` conflate a
+		 * healthy-bus NACK with a genuinely wedged bus. */
+		if (retry_noexs)
+			err = i2c_xfer_once(is_read, dev7, reg, regsz, buf, len);
 	} else if (err != E_OK) {
 		if (err == E_TMOUT || err == E_IO)
 			i2c1_bus_recover();
@@ -534,12 +550,22 @@ static ER i2c_xfer(BOOL is_read, UB dev7, UW reg, UINT regsz, UB *buf, UW len)
 
 ER i2c_rd(UB dev7, UW reg, UINT regsz, UB *buf, UW len)
 {
-	return i2c_xfer(TRUE, dev7, reg, regsz, buf, len);
+	return i2c_xfer(TRUE, dev7, reg, regsz, buf, len, FALSE);
 }
 
 ER i2c_wr(UB dev7, UW reg, UINT regsz, const UB *buf, UW len)
 {
-	return i2c_xfer(FALSE, dev7, reg, regsz, (UB *)buf, len);
+	return i2c_xfer(FALSE, dev7, reg, regsz, (UB *)buf, len, FALSE);
+}
+
+ER i2c_rd_rt(UB dev7, UW reg, UINT regsz, UB *buf, UW len)
+{
+	return i2c_xfer(TRUE, dev7, reg, regsz, buf, len, TRUE);
+}
+
+ER i2c_wr_rt(UB dev7, UW reg, UINT regsz, const UB *buf, UW len)
+{
+	return i2c_xfer(FALSE, dev7, reg, regsz, (UB *)buf, len, TRUE);
 }
 
 /* ------------------------------------------------------------------------ */

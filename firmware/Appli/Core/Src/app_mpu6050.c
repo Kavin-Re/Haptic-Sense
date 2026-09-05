@@ -368,8 +368,17 @@ void mpu6050_service(void)
 	 * reads costs 2 wasted bytes and buys one transaction, one semaphore
 	 * round-trip, and the coherence guarantee across accel AND gyro
 	 * (design doc §2.3), even though only accel feeds the feature vector. */
-	if (i2c_rd(mpu_addr7, (UW)MPU_REG_ACCEL_XOUT_H, I2C_REG8,
-		   mpu_buf, 14) != E_OK) {
+	/* i2c_rd_rt(), not i2c_rd(): this is a post-init periodic read of a
+	 * device already confirmed present (mpu6050_init() succeeded before
+	 * mstats.armed was ever set) -- the boot-time "device might be
+	 * absent" reasoning behind i2c_rd()'s no-retry-on-NACK policy does
+	 * not apply here. Confirmed 2026-09-05: the only real dropped accel
+	 * read in a 30-minute soak was exactly an E_NOEXS with no retry
+	 * (docs/evidence/phase5/PHASE5_I2C_TWISTED_JOINT_20260905.md §4,
+	 * adversarial review 2.6). See app_i2c.h's doc comment on
+	 * i2c_rd_rt() for the full reasoning. */
+	if (i2c_rd_rt(mpu_addr7, (UW)MPU_REG_ACCEL_XOUT_H, I2C_REG8,
+		      mpu_buf, 14) != E_OK) {
 		mstats.rderr++;		/* leave ax/ay/az at their last value */
 		mstats.last_valid = 0;	/* PH6-1: stale hold-over, not a fresh sample */
 		return;
