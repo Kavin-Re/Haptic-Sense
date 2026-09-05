@@ -63,9 +63,25 @@ The GY-521's 72.3 kΩ to VCC is the reverse-leakage path through its regulator: 
 | Block 3: **both 2.2 kΩ pairs removed** | 1303 Ω | 2.23 mA | 3 mA | **OK** |
 | **IMU dropped, nothing modified** | 818 Ω | 3.54 mA | 4 mA | **OK** |
 
-**So: if the MPU6050 ships, BOTH 2.2 kΩ pairs must come off — the SmartElex jumper AND two desoldered resistors on the GY-521. Removing either alone leaves the MPU6050 sinking ~3.55 mA against a 3 mA spec.** If the IMU is dropped (risk register schedule valve #2), no pull-up modification is needed at all. **This is a new, independent argument for that valve and it was not available when the valve was written.**
+**SUPERSEDED, see the 2026-09-03/05 update a few paragraphs below (after the VIL CORRECTION note): re-derived with both datasheet IOL/VOL points, either single mitigation alone is sufficient — not both. What was actually done: SmartElex jumper opened, GY-521 left untouched.** **So: if the MPU6050 ships, BOTH 2.2 kΩ pairs must come off — the SmartElex jumper AND two desoldered resistors on the GY-521. Removing either alone leaves the MPU6050 sinking ~3.55 mA against a 3 mA spec.** If the IMU is dropped (risk register schedule valve #2), no pull-up modification is needed at all. **This is a new, independent argument for that valve and it was not available when the valve was written.** If the IMU is dropped (risk register schedule valve #2), no pull-up modification is needed at all.
 
 **VIL CORRECTION.** This file previously justified 892 Ω with "VOL only has to stay under VIL = 0.99 V". Wrong — 0.99 V is the generic 0.3 × VDD. **SLOS854D §6.3 gives the DRV2605L an absolute `VIL` max of 0.5 V on EN / IN-TRIG / SDA / SCL**, which is the tightest receiver threshold on this bus (VL53L1X 0.6 V, MPU6050 0.3 × VLOGIC = 0.99 V). Budget against 0.5 V, not 0.99 V.
+
+**UPDATE 2026-09-03/05 — the "both pull-up pairs must come off" conclusion above was over-derived, and here is what was actually done about it.** `PROJECT_AUDIT_20260903.md` §6.2 re-derived the same table using BOTH of the MPU6050 datasheet's IOL/VOL points (this file's table above used only the "Typical" 3 mA column, silently dropping the second, `VOL = 0.6 V → 5 mA` point). Solving with both points against the 0.5 V VIL threshold: the **818 Ω / 811 Ω single-mitigation rows both settle ~0.45 V — inside 0.5 V, i.e. they PASS.** Only the **593 Ω all-pull-ups-fitted row genuinely fails** (~0.562 V, ~12% over). So the table's own "either single mitigation only → FAIL" rows were wrong; **removing either the SmartElex jumper OR the GY-521's resistors is sufficient on its own** — not both.
+
+**Decided and done, 2026-09-05: the SmartElex `I2C-PU` jumper was desoldered** (verified by SDA-to-SCL resistance jumping to 174.4 kΩ post-desolder — SDA-to-SCL, not SDA-to-GND, is the correct measurement here; SDA-to-GND is misleading because it depends on the VCC net's LDO-reverse-leakage path, the same phenomenon behind the GY-521's own 72.3 kΩ reading below). **The GY-521's onboard pull-up resistors were deliberately left untouched** — desoldering 0402-class resistors on an irreplaceable board with no spare, for a mitigation the corrected analysis above shows isn't required once the SmartElex side is open.
+
+**Net result, from paired 30-minute soaks before/after (full data:
+`docs/evidence/phase5/PHASE5_I2C_TWISTED_JOINT_20260905.md` §4–§5):** a small, MPU6050-isolated
+I2C fault survives in both configurations — one dropped accel read out of ~81,000 per 30-minute
+run, unchanged before and after the jumper was opened. Bus-recovery/NACK *counts* actually rose
+after the change (small-sample noise on an already-bursty fault, or the rework itself disturbing
+a marginal contact — not resolved either way), but the number that measures real data loss did
+not move. **Accepted as residual risk 2026-09-05**, on the grounds that the hazard classifier
+does not consume IMU data yet (`PH6-1_feature_frame_validity.md` §6) and the contest's actual
+disqualification bar is untouched by it. Revisit if the fault rate ever visibly worsens beyond
+this baseline, or once Block 6 wires real accel data into the classifier — `imu_valid` MUST be
+honored (skip/hold-last on an invalid frame) by whatever consumes it then.
 
 Good news from the same measurements: the 7SEMI's I2C pull-ups go to **VIN, not to its 2.8 V LDO**, and its `VIH` range is 1.12–3.5 V (DS12385 Table 16), so **3.3 V logic needs no level shifter** — a latent worry now closed. Rise time is confirmed by measurement, not just computed: real edge time ~100 ns (H-D8).
 
