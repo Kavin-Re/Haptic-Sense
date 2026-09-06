@@ -16,7 +16,7 @@ PAT = {
  "I2C": re.compile(r"\[I2C\] init=(-?\d+) .*? ok=(\d+) err=(\d+) tmo=(\d+) recov=(\d+)"),
  "DRV": re.compile(r"\[DRV\] init=(-?\d+) id=(\d+) mode=0x(\w+) lib=0x(\w+) seq=0x(\w+) odc=0x(\w+) sts=0x(\w+) armed=(\d+)"),
  "TRG": re.compile(r"\[TRG\] pulses=(\d+) suppressed=(\d+) cyc=(\d+) rst=(\d+) rstmode=0x(\w+)"),
- "HLT": re.compile(r"\[HLT\] polls=(\d+) faults=0x(\w+) cfglost=(\d+)"),
+ "HLT": re.compile(r"\[HLT\] polls=(\d+) faults=0x(\w+) cfglost=(\d+)(?: rearm=(\d+) rearmfail=(\d+))?"),
  "EFF": re.compile(r"\[EFF\] n=(\d+) last=(\d+) min=(\d+) max=(\d+) late=(\d+) stuck=(\d+)(?: rderr=(\d+))?"),
  "DWT": re.compile(r"\[DWT\] ok=(\d+) cyc=(\d+) cyc_per_ms=(\d+)"),
  "NAK": re.compile(r"\[NAK\] nacks=(\d+)"),
@@ -102,6 +102,24 @@ def main():
               "no [HLT] line found in this log -- cannot verify fault or "
               "cfg-lost state; do not read this as a clean bench")
 
+    # --- cfg_lost bounded re-arm (BLOCK5_MECHANICAL_FREEZE_RUNBOOK sec1.2).
+    #     rearm/rearmfail are optional in the regex for backward compat with
+    #     pre-rearm logs, where the group is None, not "0" -- same pattern as
+    #     EFF's rderr above. A healthy bench run should never need a re-arm
+    #     at all; any nonzero rearm is worth reading the log for, and a
+    #     nonzero rearm_fail means the part would have stayed silently dead
+    #     if this feature did not exist.
+    if rows["HLT"]:
+        rearm_vals = [int(g[3]) for g in rows["HLT"] if g[3] is not None]
+        if rearm_vals:
+            rearm_max = max(rearm_vals)
+            rearmfail_max = max(int(g[4]) for g in rows["HLT"] if g[4] is not None)
+            check(rearm_max == 0, "rearm -- cfg_lost never required a re-arm",
+                  "max %d (rearm_fail max %d)" % (rearm_max, rearmfail_max))
+        else:
+            check(True, "rearm",
+                  "no rearm field in this log: pre-rearm firmware, check N/A")
+
     # --- HANDOFF sec4 / code-review sec4: the permanent supply-health
     #     regression detector. All zero is the VIN-fix proof; nonzero on a
     #     later run means a supply fault came back, not just "it works".
@@ -157,7 +175,21 @@ def main():
           "max %d (min %d -- negative is ISR/retry print-ordering skew, benign)"
           % (bf_max, bf_min))
     check(tmo <= {0}, "I2C tmo", "max %d" % max(tmo or {0}))
-    check(rec <= {0}, "I2C recov", "max %d" % max(rec or {0}))
+    # recov (I2C bus-recovery calls) is NOT held to a strict-zero bar.
+    # BLOCK5_MECHANICAL_FREEZE_RUNBOOK_20260905.md Stage 4/Gate G5's own pass
+    # table sets the bar at "does not exceed the current baseline", and the
+    # 09-06 pullupfix2 baseline is itself recov=11 -- an occasional bus
+    # recovery is the accepted normal state on this bus, not a regression;
+    # the project's own sec6 experiment is built on recov moving between
+    # runs. The old `rec <= {0}` subset check flagged ANY recovery at all as
+    # a FAILURE, which misreported even a soak far better than baseline
+    # (e.g. recov=1 on the 2026-09-06 cfg_lost re-arm regression soak,
+    # soak_10min_20260906_rearmtest2.log) as broken.
+    REC_MAX = 11
+    rec_max = max(rec or {0})
+    check(rec_max <= REC_MAX,
+          "I2C recov (<= %d, 09-06 pullupfix2 baseline)" % REC_MAX,
+          "max %d" % rec_max)
     # A NACK is not a bus fault, but it is not nothing either: it means a
     # device this firmware probes did not answer. Expected to be exactly 1
     # while the VL53L1X is unsoldered (the Block 2 L1 probe), and 0 after.
