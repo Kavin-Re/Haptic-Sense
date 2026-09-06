@@ -231,7 +231,16 @@ BOOL drv2605l_trig_fire(UW want_interval_ms)
 /* Every value below is verified against the local datasheet copy            */
 /* docs/datasheets/drv2605l_datasheet.pdf (TI SLOS854D Rev D, March 2018).   */
 /* Decision 4 (plan v2 §1): R-1 — EN is init-only and is never toggled at    */
-/* runtime; the kill path is a STANDBY write from TK_PRI 3, not a GPIO yank. */
+/* runtime. DECIDED 2026-09-05 (BLOCK5_MECHANICAL_FREEZE_RUNBOOK_20260905.md */
+/* §1.1): a STANDBY-write kill path from TK_PRI 3 is DESIGNED BUT DELIBERATELY */
+/* NOT IMPLEMENTED, not merely deferred. Playback is a finite one-shot ROM   */
+/* effect (H-D3: 58,605-58,708 us) with no continuous-drive mode, repeat    */
+/* rate is already hard-bounded by DRV_R3_FLOOR_MS, and EN on PE7           */
+/* (init-only) is the emergency path already in copper. Adding a P1->P3     */
+/* fault-triggered I2C write path in the last week -- new shared state, new */
+/* race surface, in a binary that becomes undebuggable after packing -- was */
+/* judged a worse trade than the risk it removes. Do not build R-2; if this */
+/* reasoning is ever revisited, start from the runbook section above.       */
 /* The MODE=6 actuator diagnostic from DRV2605L_P3_INIT_ARMING_DESIGN.md is  */
 /* deliberately NOT in this sequence: it spins the motor, and running it at  */
 /* every power-up in front of a judge is not a feature. Run it by hand as    */

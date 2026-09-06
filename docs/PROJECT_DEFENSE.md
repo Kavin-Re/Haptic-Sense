@@ -1,7 +1,13 @@
 # PROJECT DEFENSE — Haptic-Sense
 
-Project: Haptic-Sense (TRON Forum Contest 2026) · STM32N6570-DK (Cortex-M55 @ 600 MHz + Neural-ART NPU) · µT-Kernel 3.0
-Written: 2026-07-12. Hard deadline: **2026-09-25**.
+Project: Haptic-Sense (TRON Forum Contest 2026) · STM32N6570-DK (Cortex-M55 @ 800 MHz + Neural-ART NPU) · µT-Kernel 3.0
+Written: 2026-07-12. **Both facts on this line are stale, corrected 2026-09-06:**
+~~Hard deadline: 2026-09-25~~ and ~~Cortex-M55 @ 600 MHz~~ were wrong even at the time (F-16,
+`PROJECT_AUDIT_20260903.md` §2 -- unsourced and contradicted by `CLAUDE.md:4`'s 30 Sep; the
+600 MHz was corrected on hardware 2026-08-30, see `CLAUDE.md` §1 G-8). **The real submission
+mechanics are sourced and settled in `CONTEST_LOGISTICS.md`: code/docs may be submitted up to
+2026-09-30 23:59 JST; hardware (if used, and it is here) must ARRIVE by 2026-09-30 18:00 JST --
+two independent deadlines, neither of them 25 Sep.** Clock is 800 MHz, hardware-confirmed.
 
 **What this document is.** Insurance, not design. Three drivers are designed and audited
 (VL53L1X, MPU6050, DRV2605L), the four-task RTOS architecture is hardware-proven, and the

@@ -83,11 +83,24 @@ def main():
           "max gap %d ms" % max(gaps))
 
     # --- the sticky fault latch: the whole reason drv2605l_poll() exists ---
-    faults = {g[1] for g in rows["HLT"]}
-    check(faults <= {"0"}, "faults (OC_DETECT | OVER_TEMP), sticky",
-          "values seen: " + ", ".join("0x" + f for f in sorted(faults)))
-    cfg = {int(g[2]) for g in rows["HLT"]}
-    check(cfg <= {0}, "cfglost -- MODE still 0x01", "max %d" % max(cfg or {0}))
+    # ADVERSARIAL_REVIEW sec4.4 / PROJECT_AUDIT sec1.4: `set() <= {0}` is True,
+    # so if rows["HLT"] is EMPTY both checks below used to pass silently --
+    # an absent counter is not the same as a zero counter, and this heartbeat
+    # line has existed since before this tool did. No [HLT] lines in a
+    # current-era log means something is actually broken (wrong file, a
+    # capture that started after the print stopped, or a firmware
+    # regression) -- fail loudly instead of reporting a clean bench that was
+    # never actually polled.
+    if rows["HLT"]:
+        faults = {g[1] for g in rows["HLT"]}
+        check(faults <= {"0"}, "faults (OC_DETECT | OVER_TEMP), sticky",
+              "values seen: " + ", ".join("0x" + f for f in sorted(faults)))
+        cfg = {int(g[2]) for g in rows["HLT"]}
+        check(cfg <= {0}, "cfglost -- MODE still 0x01", "max %d" % max(cfg))
+    else:
+        check(False, "faults / cfglost ([HLT] line)",
+              "no [HLT] line found in this log -- cannot verify fault or "
+              "cfg-lost state; do not read this as a clean bench")
 
     # --- HANDOFF sec4 / code-review sec4: the permanent supply-health
     #     regression detector. All zero is the VIN-fix proof; nonzero on a
