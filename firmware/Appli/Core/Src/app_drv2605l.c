@@ -68,6 +68,11 @@ static UW drv_cyc_per_us = 800u;	/* 800 MHz until init runs */
 #define DRV_REG_GO		0x0Cu	/* bit 0 = GO (Table 3, reset 0x00) */
 #define DRV_GO_BIT		0x01u
 #define DRV_EFF_SAMPLES_MAX	5u
+#define DRV_REARM_MAX		8u	/* cfg_lost bounded re-arm cap, per boot.
+					 * BLOCK5_MECHANICAL_FREEZE_RUNBOOK_20260905.md
+					 * sec1.2 -- a genuinely dead part must not turn
+					 * into an unbounded I2C hammer that starves the
+					 * ToF path sharing the same bus.                */
 #define DRV_EFF_POLL_MAX	2000u	/* ~150 us per read => ~300 ms ceiling */
 
 /* HAP-T9 handshake. drv_meas_t0 is written by hazard_task (TK_PRI 1) at the
@@ -592,20 +597,53 @@ void drv2605l_poll(void)
 {
 	UB v;
 
-	if (!drv_armed)
-		return;
-
+	/* NOTE: deliberately does NOT early-return on !drv_armed. This function
+	 * runs strictly after drv2605l_init()'s one startup call (app_tasks.c),
+	 * so the device is on the bus and EN is high (init-only, R-1) whichever
+	 * way this poll goes -- "not armed" here only ever means "the last
+	 * register readback disagreed with what we configured", never "never
+	 * brought up". drv2605l_trig_fire() gates on drv_armed on its own for
+	 * suppressing pulses; this function's job is telemetry plus the bounded
+	 * re-arm below, and both need to keep running even while unarmed, or a
+	 * re-arm that fails once can never be retried. */
 	dstats.polls++;
 
 	if (drv_rd8(DRV_REG_STATUS, &v) == E_OK) {
 		dstats.status_rb   = (UW)v;	/* now LIVE, not a snapshot */
 		dstats.faults_seen |= (UW)(v & DRV_STATUS_FAULT_MASK);
+		/* faults_seen is deliberately NOT acted on here -- OC_DETECT /
+		 * OVER_TEMP are the part's own protection already having worked
+		 * (CLAUDE.md sec8, 2026-08-30: coil undamaged after the real
+		 * OC_DETECT event). A software shutdown layered on top of working
+		 * hardware protection can only introduce a spurious-shutdown
+		 * failure mode. BLOCK5_MECHANICAL_FREEZE_RUNBOOK_20260905.md
+		 * sec1.2. */
 	}
 
 	if (drv_rd8(DRV_REG_MODE, &v) == E_OK) {
 		dstats.mode_rb = (UW)v;
-		if (v != DRV_MODE_EDGE_TRIG)
+		if (v != DRV_MODE_EDGE_TRIG) {
 			dstats.cfg_lost++;	/* armed config no longer holds */
+			/* cfg_lost means the part lost its configuration -- CLAUDE.md
+			 * sec8 H-D2: registers survive an MCU reset but not a true
+			 * power cycle, so a VDD dip at the breakout resets it to 0x40
+			 * defaults. In that state TRIG edges do nothing, silently, for
+			 * the rest of that power-on -- exactly CONTEST_LOGISTICS.md
+			 * sec3's disqualification condition ("unable to confirm the
+			 * submitted program works properly"). Bounded, rate-limited
+			 * re-arm: at most one drv2605l_init() call per poll cycle
+			 * (~1 Hz, drv2605l_poll()'s own call rate), capped at
+			 * DRV_REARM_MAX attempts per boot so a genuinely dead part
+			 * cannot become an unbounded I2C hammer. drv2605l_init() is
+			 * already proven and idempotent -- it issues DEV_RESET and
+			 * confirms MODE reads 0x40 before reconfiguring -- so calling
+			 * it again here is not new risk, only a new call site. */
+			if (dstats.rearm < DRV_REARM_MAX) {
+				dstats.rearm++;
+				if (drv2605l_init() != E_OK)
+					dstats.rearm_fail++;
+			}
+		}
 	}
 }
 

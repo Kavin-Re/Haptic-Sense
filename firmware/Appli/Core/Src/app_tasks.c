@@ -822,8 +822,8 @@ static void heartbeat_task_fct(INT stacd, void *exinf)
 			 * on read, so a nonzero value means a fault happened at
 			 * some point, not that one is happening now. Nonzero at
 			 * any time after the motor is connected is a STOP. */
-			tm_printf((UB *)"[HLT] polls=%u faults=0x%x cfglost=%u\n",
-				  d->polls, d->faults_seen, d->cfg_lost);
+			tm_printf((UB *)"[HLT] polls=%u faults=0x%x cfglost=%u rearm=%u rearmfail=%u\n",
+				  d->polls, d->faults_seen, d->cfg_lost, d->rearm, d->rearm_fail);
 			/* HAP-T9: effect-1 playback duration, microseconds.
 			 * Predicted 45000-75000 (SLOS854D Table 1, Library B:
 			 * rise 40-60 ms + brake 5-15 ms). R-3 floor = max x 1.2.

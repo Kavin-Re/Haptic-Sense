@@ -158,6 +158,10 @@ typedef struct {
 	UW	polls;		/* drv2605l_poll() calls; ok = 24 + 2*polls */
 	UW	faults_seen;	/* STICKY OR of OVER_TEMP|OC_DETECT         */
 	UW	cfg_lost;	/* polls where MODE was no longer 0x01      */
+	UW	rearm;		/* bounded re-arm attempts on cfg_lost, capped at
+			 * DRV_REARM_MAX per boot -- BLOCK5_MECHANICAL_FREEZE
+			 * _RUNBOOK_20260905.md sec1.2                          */
+	UW	rearm_fail;	/* re-arm attempts where drv2605l_init() != E_OK */
 	/* HAP-T9 effect-duration measurement, microseconds */
 	UW	eff_n;		/* valid samples                            */
 	UW	eff_last_us;
