@@ -137,9 +137,25 @@ def main():
     naks = [int(g[0]) for g in rows["NAK"]]
     if len(naks) != len(errs):
         naks = [0] * len(errs)
-    busfault = {e - n for e, n in zip(errs, naks)}
-    check(busfault <= {0}, "I2C bus faults (err - nacks)",
-          "max %d" % max(busfault or {0}))
+    # SIGNED, not a strict {0}-subset check (audit sec4.2's already-fixed
+    # pulses+suppressed skew is the same bug shape). nacks is incremented in
+    # the I2C ISR the instant a NACK occurs (app_i2c.c HAL_I2C_ErrorCallback);
+    # err is only incremented in i2c_xfer() after the retry logic gives up.
+    # Within one print cycle nacks can therefore read transiently AHEAD of
+    # err even when nothing beyond a plain NACK ever happened -- that shows
+    # up as a NEGATIVE err-nacks value and is print-ordering, not a fault.
+    # Only a POSITIVE value means a bus fault happened beyond what nacks
+    # already accounts for. Found 2026-09-06: the old `busfault <= {0}`
+    # subset check failed on every log with this benign skew, regardless of
+    # whether a real excess fault existed -- reproduced against
+    # soak_10min_20260906_rearmtest.log, which never went positive but
+    # failed on {-3,-2,-1,0} anyway.
+    busfault = [e - n for e, n in zip(errs, naks)]
+    bf_max = max(busfault) if busfault else 0
+    bf_min = min(busfault) if busfault else 0
+    check(bf_max <= 0, "I2C bus faults (err - nacks)",
+          "max %d (min %d -- negative is ISR/retry print-ordering skew, benign)"
+          % (bf_max, bf_min))
     check(tmo <= {0}, "I2C tmo", "max %d" % max(tmo or {0}))
     check(rec <= {0}, "I2C recov", "max %d" % max(rec or {0}))
     # A NACK is not a bus fault, but it is not nothing either: it means a
