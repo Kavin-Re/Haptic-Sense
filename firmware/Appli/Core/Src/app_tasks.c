@@ -824,8 +824,8 @@ static void sensor_fill_frame(void)
 				  (int)norm1000(row->feat[FEAT_IDX_AX], 0, NORM_ACC_MG_SCALE),
 				  (int)norm1000(row->feat[FEAT_IDX_AY], 0, NORM_ACC_MG_SCALE),
 				  (int)norm1000(row->feat[FEAT_IDX_AZ], 0, NORM_ACC_MG_SCALE),
-				  /* PLACEHOLDER constants -- see NORM_AMBIENT_SCALE/NORM_SIGSPAD_SCALE
-				   * comment above. Do not train on these until confirmed. */
+				  /* NORM_AMBIENT_SCALE/NORM_SIGSPAD_SCALE confirmed 2026-09-16
+				   * from the k-test capture -- see comment above the #define. */
 				  (int)norm1000(row->feat[FEAT_IDX_AMBIENT], 0, NORM_AMBIENT_SCALE),
 				  (int)norm1000(row->feat[FEAT_IDX_SIGSPAD], 0, NORM_SIGSPAD_SCALE),
 				  row->imu_state, row->imu_age, row->tof_state, row->tof_age, label);
