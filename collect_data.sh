@@ -6,7 +6,6 @@
 set -u
 LOGDIR="$HOME/haptic-sense/logs"
 mkdir -p "$LOGDIR"
-PORT="/dev/ttyACM0"
 BAUD="115200"
 CAPTURE_SECONDS=45
 
@@ -19,6 +18,68 @@ echo "You will just be pressing Enter and waving your hand -- nothing else."
 echo ""
 
 # ---------------------------------------------------------------
+# Port auto-detection + retry helpers.
+# The board's serial port name (e.g. /dev/ttyACM0) can shift to
+# /dev/ttyACM1 or higher if it gets unplugged/replugged, and there
+# can be a brief failure right after plugging in (something else on
+# the system probing the new port). detect_port() re-scans fresh
+# every time rather than trusting a value found earlier, and
+# run_capture() retries past a fast/early failure instead of giving
+# up on the first try.
+# ---------------------------------------------------------------
+detect_port() {
+  local candidates
+  candidates=(/dev/ttyACM*)
+  if [ ! -e "${candidates[0]:-}" ]; then
+    return 1
+  fi
+  # Prefer the highest-numbered node -- the most recently created one
+  # after a replug. Only this one line goes to stdout (it's the
+  # function's real return value); everything else in this file uses
+  # stderr for messages so redirecting a capture's stdout to hide the
+  # raw serial spam never hides a status/retry message too.
+  echo "${candidates[-1]}"
+  return 0
+}
+
+# run_capture <seconds> <outfile>
+# Detects the port fresh, runs picocom for <seconds>, and retries up
+# to 3 times total if it fails immediately (empty/near-empty output,
+# which is what a transient port-open failure looks like -- a real
+# successful capture always produces a lot of output over the full
+# duration).
+run_capture() {
+  local secs="$1" outfile="$2" attempt port
+  for attempt in 1 2 3; do
+    port=$(detect_port)
+    if [ -z "$port" ]; then
+      echo "No /dev/ttyACM* device found (attempt $attempt/3). Waiting 3 seconds and checking again..." >&2
+      sleep 3
+      continue
+    fi
+    if [ "$attempt" -gt 1 ]; then
+      echo "Retrying on $port (attempt $attempt/3)..." >&2
+      sleep 2
+    fi
+    timeout "$secs" picocom -b "$BAUD" "$port" | tee "$outfile"
+    # A real capture of $secs seconds produces many lines. Fewer than
+    # 5 means picocom failed fast (bad port, port busy, etc.) rather
+    # than actually capturing for the full duration.
+    if [ "$(wc -l < "$outfile" 2>/dev/null || echo 0)" -ge 5 ]; then
+      return 0
+    fi
+    echo "" >&2
+    echo "That attempt failed fast (only $(wc -l < "$outfile" 2>/dev/null || echo 0) lines captured) -- retrying..." >&2
+  done
+  echo "" >&2
+  echo "!!! Could not get a working connection to the board after 3 tries. !!!" >&2
+  echo "STOP here. Common causes: the USB cable came loose, or another program" >&2
+  echo "on this computer already has the serial port open. Do not try to fix" >&2
+  echo "this yourself -- wait for the project owner." >&2
+  return 1
+}
+
+# ---------------------------------------------------------------
 # Step 0: pre-flight check -- verifies the board is alive and the
 # correct firmware is running, BEFORE any real capture starts.
 # ---------------------------------------------------------------
@@ -28,7 +89,9 @@ echo ""
 read -p "Press Enter to run the check: " _
 
 PRECHECK="$LOGDIR/preflight_check.log"
-timeout 12 picocom -b "$BAUD" "$PORT" | tee "$PRECHECK"
+if ! run_capture 12 "$PRECHECK"; then
+    exit 1
+fi
 
 if [ ! -s "$PRECHECK" ]; then
     echo ""
@@ -121,8 +184,12 @@ for surface in "${SURFACES[@]}"; do
       FNAME="$LOGDIR/csv_${surface}_${angle}_${speed}_$(date +%H%M%S).log"
       echo ""
       echo ">>> RECORDING NOW -- START WAVING <<<"
-      timeout "$CAPTURE_SECONDS" picocom -b "$BAUD" "$PORT" | tee "$FNAME" > /dev/null
-      echo ">>> Done. Saved. <<<"
+      if run_capture "$CAPTURE_SECONDS" "$FNAME" > /dev/null; then
+        echo ">>> Done. Saved. <<<"
+      else
+        echo ">>> This recording failed -- see the message above. Stopping. <<<"
+        exit 1
+      fi
     done
   done
 done
