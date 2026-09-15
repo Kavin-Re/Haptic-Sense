@@ -156,14 +156,20 @@
 #endif
 
 /*
- * CSV_LABEL_SHIFT_K — the G-1 label-shift value k, in frames. PLACEHOLDER:
- * this is NOT yet confirmed. Run RAWLOG_K_TEST first (see
- * docs/DATA_COLLECTION_PROTOCOL_20260916.md §1/§3) and set this to the
- * empirically-chosen value before building CSV_LOG_ENABLE for a real
- * collection session -- 10 (~200ms at ~47-50Hz) is only the plan's starting
- * hypothesis, not a measured result.
+ * CSV_LABEL_SHIFT_K — the G-1 label-shift value k, in frames. CONFIRMED
+ * 2026-09-16 via RAWLOG_K_TEST (see docs/DATA_COLLECTION_PROTOCOL_20260916.md
+ * §1/§3): measured sensor-task cycle rate is ~28ms (~35.7Hz), not the
+ * ~47-50Hz originally assumed. Analysis of the k-test capture found clean
+ * fast-approach events (close range, <400mm, v>=60cm/s at crossing, real
+ * monotonic distance drop beforehand) with a lead time of 4-20 frames
+ * before the hazard rule engaged, median 16 frames (~450ms), n=6. Picked
+ * k=12 (~336ms at the measured rate) as a middle ground: above the
+ * original 10-frame guess to reflect the data, below the observed median
+ * so frame-t features don't lose correlation with the frame-(t+k) label
+ * over too long a horizon. Small sample -- revisit if early CSV_LOG_ENABLE
+ * sessions suggest the model isn't learning cleanly at this shift.
  */
-#define CSV_LABEL_SHIFT_K	10u	/* frames -- PLACEHOLDER, confirm via RAWLOG_K_TEST */
+#define CSV_LABEL_SHIFT_K	12u	/* frames -- CONFIRMED via RAWLOG_K_TEST 2026-09-16, ~336ms @ 28ms/cycle */
 #define CSV_RING_LEN		(CSV_LABEL_SHIFT_K + 1u)
 
 /*
@@ -192,19 +198,22 @@
 #define NORM_ACCEL_SCALE	5000	/* cm/s^2 -- PROVISIONAL, see comment above */
 #define NORM_ACC_MG_SCALE	4000	/* mg, +-4g hardware full-scale (locked) */
 /*
- * NORM_AMBIENT_SCALE / NORM_SIGSPAD_SCALE: PLACEHOLDER, added 2026-09-16.
- * No project doc characterizes these counts on this board with these
- * surfaces -- unlike NORM_ACCEL_SCALE above, there isn't even a rough
- * anchor to guess from. DO NOT trust these numbers. Run RAWLOG_K_TEST
- * (amb=/spad= fields already added to its print line) across the G-4
- * protocol's 4 surfaces first, read the real min/max, and replace these
- * two constants before ever relying on CSV_LOG_ENABLE's normalized
- * amb/spad output for training. Zero-centered offset is also a guess --
- * these counts are naturally >= 0, so an offset may belong here once
- * real numbers exist (see NORM_DIST_OFFSET for the pattern).
+ * NORM_AMBIENT_SCALE / NORM_SIGSPAD_SCALE: CONFIRMED 2026-09-16 from the
+ * RAWLOG_K_TEST capture (11653 samples, close-range + far-range mixed,
+ * not yet the full 4-surface G-4 sweep -- revisit if early CSV_LOG_ENABLE
+ * sessions on the other 3 surfaces show clipping). Measured: amb 0-232
+ * (p95 144), spad 1672-57544 (p95 22784). The old 20000/20000 placeholder
+ * was badly wrong for amb (0.1% headroom above the real max -> would have
+ * saturated almost every reading to +1000) and clipped ~13% of spad
+ * samples. NORM_AMBIENT_SCALE=250 gives 0% clipping on this data;
+ * NORM_SIGSPAD_SCALE=25000 cuts clipping from 13% to ~4% without overly
+ * compressing resolution for the bulk of readings (median 6600). Offset
+ * stays 0 (zero-anchored, not zero-centered) -- both counts are naturally
+ * >= 0, so norm1000() here only ever produces [0,1000], which is correct,
+ * not a bug; matches the call sites in the CSV logger below.
  */
-#define NORM_AMBIENT_SCALE	20000	/* counts -- PLACEHOLDER, UNVERIFIED, see above */
-#define NORM_SIGSPAD_SCALE	20000	/* counts -- PLACEHOLDER, UNVERIFIED, see above */
+#define NORM_AMBIENT_SCALE	250	/* counts -- CONFIRMED via RAWLOG_K_TEST 2026-09-16, 0% clip */
+#define NORM_SIGSPAD_SCALE	25000	/* counts -- CONFIRMED via RAWLOG_K_TEST 2026-09-16, ~4% clip */
 
 /*
  * norm1000() — clamp((raw - offset) * 1000 / scale, -1000, 1000). Integer
