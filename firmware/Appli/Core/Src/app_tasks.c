@@ -181,20 +181,32 @@
  * offset (sweep midpoint), the rest are zero-centered by construction.
  *   NORM_DIST_*:    G-4 §6 locked sweep is 5cm-1.3m -> 50-1300mm; offset is
  *                    the midpoint (675mm), scale is the half-range (625mm).
- *   NORM_VEL_SCALE:  G-3 decided closing-velocity range, +-100 cm/s.
+ *   NORM_VEL_SCALE:  REVISED 2026-09-16, overriding the original G-3
+ *                    +-100 cm/s decision. CSV_LOG_ENABLE smoke test (see
+ *                    docs/DATA_COLLECTION_PROTOCOL_20260916.md) measured
+ *                    ~26.5%-40% of real closing-velocity readings clipping
+ *                    at +-100 -- real swipes reach up to ~291 cm/s (p99
+ *                    ~239), so the original locked value was silently
+ *                    discarding exactly the signal the hazard classifier
+ *                    needs most. Widened to +-250 cm/s (clip rate ~0.4%
+ *                    on the full k-test dataset). Flagged here explicitly
+ *                    since this overrides a decision previously marked
+ *                    locked, not a placeholder.
  *   NORM_ACCEL_SCALE: PROVISIONAL. RISK_ANALYSIS_20260830.md G-3 only
  *                    characterizes this as "several thousand cm/s^2" --
  *                    +-5000 is a working bound, not a measured one. If the
  *                    RAWLOG_K_TEST or early CSV_LOG_ENABLE sessions show
  *                    accel clipping at +-1000 milli-units often, widen this
  *                    before real collection; do not leave it silently
- *                    clipping real data.
+ *                    clipping real data. (Checked against the 2026-09-16
+ *                    smoke test: a stayed within [-614,732], no clipping
+ *                    observed -- left as-is.)
  *   NORM_ACC_MG_SCALE: hardware full-scale for AFS_SEL=1 (locked decision),
  *                    +-4g == +-4000mg exactly -- not provisional.
  */
 #define NORM_DIST_OFFSET	675	/* mm, sweep midpoint */
 #define NORM_DIST_SCALE		625	/* mm, sweep half-range */
-#define NORM_VEL_SCALE		100	/* cm/s */
+#define NORM_VEL_SCALE		250	/* cm/s -- REVISED 2026-09-16, was 100, see comment above */
 #define NORM_ACCEL_SCALE	5000	/* cm/s^2 -- PROVISIONAL, see comment above */
 #define NORM_ACC_MG_SCALE	4000	/* mg, +-4g hardware full-scale (locked) */
 /*
