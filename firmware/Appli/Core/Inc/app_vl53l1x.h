@@ -72,6 +72,14 @@ typedef struct {
 	UW	last_mm;	/* most recent ACCEPTED distance, mm            */
 	UW	min_mm;		/* lifetime, accepted frames only               */
 	UW	max_mm;
+	UW	ambient;	/* result.Ambient, most recent ACCEPTED frame -- background
+			 * light level, same VL53L1X_Result_t read that already gets
+			 * last_mm, zero extra I2C cost. Added 2026-09-16 for the
+			 * Block 6 G-2 object/surface-type feature exploration. */
+	UW	sig_per_spad;	/* result.SigPerSPAD, most recent ACCEPTED frame --
+			 * return signal strength per SPAD, correlates with target
+			 * reflectance (hand vs. fabric vs. wall vs. glass/plastic).
+			 * Same read as ambient above. */
 } vl53l1x_stats_t;
 
 /* Full bring-up: boot gate -> id -> SensorInit -> short mode -> 15 ms budget

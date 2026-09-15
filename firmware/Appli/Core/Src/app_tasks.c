@@ -91,7 +91,156 @@
 #define FEAT_IDX_AX		(FEAT_DIST_HIST + 2)	/* mg    -> [12] */
 #define FEAT_IDX_AY		(FEAT_DIST_HIST + 3)	/* mg    -> [13] */
 #define FEAT_IDX_AZ		(FEAT_DIST_HIST + 4)	/* mg    -> [14] */
-#define FEAT_COUNT		(FEAT_DIST_HIST + 5)	/* 15 — see note  */
+/* Added 2026-09-16: VL53L1X return-signal features, same accepted-frame
+ * read as d(t) above (see vl53l1x_stats_t.ambient/sig_per_spad), zero
+ * extra I2C cost. Surface/object-type discrimination signal (SigPerSPAD
+ * correlates with target reflectance -- hand vs. fabric vs. wall vs.
+ * glass/plastic) alongside the existing distance/velocity/IMU features.
+ * NOT part of the hazard label (still d<800mm && v>20cm/s, unchanged) --
+ * these are context features for the classifier only. */
+#define FEAT_IDX_AMBIENT	(FEAT_DIST_HIST + 5)	/* counts -> [15] */
+#define FEAT_IDX_SIGSPAD	(FEAT_DIST_HIST + 6)	/* counts -> [16] */
+#define FEAT_COUNT		(FEAT_DIST_HIST + 7)	/* 17 — see note  */
+
+/*
+ * RAWLOG_K_TEST — TEMPORARY, Block 6 prerequisite only (added 2026-09-16).
+ * Prints one raw distance/velocity line per accepted sensor_task cycle so a
+ * short (~5 min) bench session can be captured over UART and used to pick
+ * the G-1 label-shift value k empirically (see
+ * docs/DATA_COLLECTION_PROTOCOL_20260916.md §1) -- NOT the shipped feature
+ * logger. No label, no full feature vector, no CSV columns -- just enough
+ * to see, frame-by-frame, how far out a closing approach becomes
+ * distinguishable from "not approaching."
+ * MUST be 0 before building the real G-2 CSV feature logger or any
+ * submission binary -- this is bench-instrumentation only, same discipline
+ * as the MPU_ADDR7_LOW/HIGH test-address swap used for the Stage 5
+ * IMU-absent test (revert-before-ship precedent already established this
+ * project).
+ */
+#define RAWLOG_K_TEST		1	/* set to 1 to build the k-determination test */
+
+/*
+ * Tri-state validity sentinels (docs/ADVERSARIAL_REVIEW_I2C_DECISION_20260905.md
+ * §4.1). VSTATE_INVALID == 0x00 is deliberate: it is also the BSS-zero
+ * default, so an untouched imu_state/tof_state field reads INVALID (the
+ * safe direction) before sensor_fill_frame() ever runs a single cycle --
+ * same sentinel discipline as CLAUDE.md §3's other zero-is-unsafe fields.
+ */
+#define VSTATE_INVALID		0x00u	/* == BSS zero == the safe default */
+#define VSTATE_HELD		0x5Au
+#define VSTATE_FRESH		0xA5u
+
+/*
+ * VALID_MAX_HOLD: frames a HELD sample may age before it becomes INVALID.
+ * Derived from the locked DLPF_CFG=4 (~21 Hz bandwidth, CLAUDE.md §2) --
+ * one frame at ~45-50 Hz is ~20-22 ms, and the anti-alias filter already
+ * correlates adjacent samples more than a 1-2 frame hold distorts them.
+ * Applied to both imu_state and tof_state for symmetry; not separately
+ * re-derived from the VL53L1X's own timing budget -- revisit if ToF-side
+ * HELD/INVALID transitions look wrong once real logs exist.
+ */
+#define VALID_MAX_HOLD		2u	/* ~45 ms */
+
+/*
+ * CSV_LOG_ENABLE — Block 6 G-2 feature logger (added 2026-09-16). Prints
+ * one CSV row every cycle once the label-shift ring buffer has filled,
+ * with the label computed from the hazard rule evaluated K frames in the
+ * FUTURE relative to the row being printed (G-1 predictive-label decision).
+ * MUST be 0 (and RAWLOG_K_TEST already reverted to 0) before this is ever
+ * built for anything but a Block 6 collection session.
+ */
+#define CSV_LOG_ENABLE		0	/* set to 1 to build the Block 6 CSV feature logger */
+
+#if RAWLOG_K_TEST && CSV_LOG_ENABLE
+#error "RAWLOG_K_TEST and CSV_LOG_ENABLE are mutually exclusive test builds -- run RAWLOG_K_TEST first to pick k, then flip to CSV_LOG_ENABLE for real collection, never both at once."
+#endif
+
+/*
+ * CSV_LABEL_SHIFT_K — the G-1 label-shift value k, in frames. PLACEHOLDER:
+ * this is NOT yet confirmed. Run RAWLOG_K_TEST first (see
+ * docs/DATA_COLLECTION_PROTOCOL_20260916.md §1/§3) and set this to the
+ * empirically-chosen value before building CSV_LOG_ENABLE for a real
+ * collection session -- 10 (~200ms at ~47-50Hz) is only the plan's starting
+ * hypothesis, not a measured result.
+ */
+#define CSV_LABEL_SHIFT_K	10u	/* frames -- PLACEHOLDER, confirm via RAWLOG_K_TEST */
+#define CSV_RING_LEN		(CSV_LABEL_SHIFT_K + 1u)
+
+/*
+ * G-3 per-feature normalization constants, all features to [-1,1], printed
+ * as integer milli-units (-1000..1000) since this codebase's tm_printf
+ * usage is integer-only throughout (no %f call exists anywhere in this
+ * file) -- avoids depending on float-printf support that may not be built
+ * in. norm1000() below applies these; distance features use a non-zero
+ * offset (sweep midpoint), the rest are zero-centered by construction.
+ *   NORM_DIST_*:    G-4 §6 locked sweep is 5cm-1.3m -> 50-1300mm; offset is
+ *                    the midpoint (675mm), scale is the half-range (625mm).
+ *   NORM_VEL_SCALE:  G-3 decided closing-velocity range, +-100 cm/s.
+ *   NORM_ACCEL_SCALE: PROVISIONAL. RISK_ANALYSIS_20260830.md G-3 only
+ *                    characterizes this as "several thousand cm/s^2" --
+ *                    +-5000 is a working bound, not a measured one. If the
+ *                    RAWLOG_K_TEST or early CSV_LOG_ENABLE sessions show
+ *                    accel clipping at +-1000 milli-units often, widen this
+ *                    before real collection; do not leave it silently
+ *                    clipping real data.
+ *   NORM_ACC_MG_SCALE: hardware full-scale for AFS_SEL=1 (locked decision),
+ *                    +-4g == +-4000mg exactly -- not provisional.
+ */
+#define NORM_DIST_OFFSET	675	/* mm, sweep midpoint */
+#define NORM_DIST_SCALE		625	/* mm, sweep half-range */
+#define NORM_VEL_SCALE		100	/* cm/s */
+#define NORM_ACCEL_SCALE	5000	/* cm/s^2 -- PROVISIONAL, see comment above */
+#define NORM_ACC_MG_SCALE	4000	/* mg, +-4g hardware full-scale (locked) */
+/*
+ * NORM_AMBIENT_SCALE / NORM_SIGSPAD_SCALE: PLACEHOLDER, added 2026-09-16.
+ * No project doc characterizes these counts on this board with these
+ * surfaces -- unlike NORM_ACCEL_SCALE above, there isn't even a rough
+ * anchor to guess from. DO NOT trust these numbers. Run RAWLOG_K_TEST
+ * (amb=/spad= fields already added to its print line) across the G-4
+ * protocol's 4 surfaces first, read the real min/max, and replace these
+ * two constants before ever relying on CSV_LOG_ENABLE's normalized
+ * amb/spad output for training. Zero-centered offset is also a guess --
+ * these counts are naturally >= 0, so an offset may belong here once
+ * real numbers exist (see NORM_DIST_OFFSET for the pattern).
+ */
+#define NORM_AMBIENT_SCALE	20000	/* counts -- PLACEHOLDER, UNVERIFIED, see above */
+#define NORM_SIGSPAD_SCALE	20000	/* counts -- PLACEHOLDER, UNVERIFIED, see above */
+
+/*
+ * norm1000() — clamp((raw - offset) * 1000 / scale, -1000, 1000). Integer
+ * fixed-point stand-in for a [-1,1] float, in milli-units, per the comment
+ * above. Not declared inline (this codebase does not use the keyword
+ * elsewhere in this file) -- a static function this small should still be
+ * inlined by the optimizer at any -O level that matters here.
+ */
+#if CSV_LOG_ENABLE
+static W norm1000(W raw, W offset, W scale)
+{
+	W n = ((raw - offset) * 1000) / scale;
+	if (n > 1000)  n = 1000;
+	if (n < -1000) n = -1000;
+	return n;
+}
+
+/*
+ * Label-shift ring buffer (Block 6 G-2). One row = one raw feature frame
+ * plus its tri-state validity, buffered CSV_RING_LEN cycles deep so row t
+ * can be labeled once row t+k's d_mm/v_cm_s is known (G-1). Module-scope
+ * static, sole writer sensor_task (P3) -- same single-writer discipline as
+ * feature_frame itself, no lock needed.
+ */
+typedef struct {
+	W	feat[FEAT_COUNT];
+	UW	imu_state;
+	UW	imu_age;
+	UW	tof_state;
+	UW	tof_age;
+} csv_row_t;
+
+static csv_row_t	csv_ring[CSV_RING_LEN];
+static INT		csv_ring_n = 0;		/* rows buffered so far, saturates at CSV_RING_LEN */
+static INT		csv_ring_pos = 0;	/* next write index, wraps mod CSV_RING_LEN */
+#endif
 
 /* Synthetic approach/retreat scenario (sensor_task) */
 #define SYN_D_FAR_MM		2000
@@ -154,6 +303,18 @@ static hazard_result_t result_slot;
  *              drives feat[0]) and on a real but stale/not-ready poll
  *              (last accepted distance held over) -- see sensor_fill_frame().
  *
+ *   TRI-STATE: imu_state/imu_age and tof_state/tof_age (added 2026-09-16,
+ *              docs/ADVERSARIAL_REVIEW_I2C_DECISION_20260905.md §4.1) are
+ *              ADDITIVE to imu_valid/tof_valid above, not a replacement --
+ *              every existing reader of imu_valid/tof_valid keeps its exact
+ *              current behavior untouched. The new fields exist only to
+ *              give the Block 6 CSV logger (CSV_LOG_ENABLE below) the
+ *              richer FRESH/HELD/INVALID distinction G-7 calls for.
+ *              Sentinel-safe per CLAUDE.md §3: VSTATE_INVALID == 0x00 ==
+ *              BSS zero, so an untouched frame reads INVALID (the safe
+ *              direction), matching imu_valid's own existing 0=invalid
+ *              convention -- this extension must never invert that.
+ *
  * feature_buf is kept as a macro so every existing feature_buf[i] call site
  * (sensor_fill_frame(), inference_task_fct()) keeps compiling unchanged.
  */
@@ -161,6 +322,10 @@ typedef struct {
 	W	feat[FEAT_COUNT];
 	UW	imu_valid;	/* mirrors mpu6050_stats_t.last_valid, PH6-1 */
 	UW	tof_valid;	/* 1 only on a fresh accepted ToF frame, PH6-1 */
+	UW	imu_state;	/* VSTATE_FRESH/HELD/INVALID, additive, see above */
+	UW	imu_age;	/* consecutive held cycles; 0 when imu_state==FRESH */
+	UW	tof_state;	/* VSTATE_FRESH/HELD/INVALID, additive, see above */
+	UW	tof_age;	/* consecutive held cycles; 0 when tof_state==FRESH */
 } feature_frame_t;
 
 static feature_frame_t feature_frame __attribute__((aligned(32)));
@@ -376,7 +541,11 @@ static void sensor_fill_frame(void)
 {
 	static W  d_mm = SYN_D_FAR_MM;
 	static W  dir = -1;		/* -1 = approaching, +1 = retreating */
+	static W  ambient_val = 0;	/* held over exactly like d_mm, see below */
+	static W  sigspad_val = 0;	/* held over exactly like d_mm, see below */
 	static UW tof_frames_seen = 0;	/* last vl53l1x_stats_t.frames consumed */
+	static UW tof_hold = 0;	/* consecutive not-advanced cycles, tri-state age */
+	static UW imu_hold = 0;	/* consecutive non-fresh cycles, tri-state age */
 	/*
 	 * Least-squares velocity/acceleration replaces the naive two-point
 	 * delta that shipped here (docs/PHASE5_DESIGN_sensor_bringup_i2c.md
@@ -439,13 +608,22 @@ static void sensor_fill_frame(void)
 			if (t->frames != tof_frames_seen) {
 				tof_frames_seen = t->frames;
 				d_mm = (W)t->last_mm;
+				ambient_val = (W)t->ambient;	/* 2026-09-16, held like d_mm */
+				sigspad_val = (W)t->sig_per_spad;
 				feature_frame.tof_valid = 1;
+				feature_frame.tof_state = VSTATE_FRESH;	/* tri-state, additive */
+				feature_frame.tof_age = 0;
+				tof_hold = 0;
 			} else {
 				/* Nothing new this tick (not ready yet, or a
 				 * dropped frame) -- hold d_mm at its last
 				 * accepted value, same discipline as the
 				 * MPU6050 rderr path (app_mpu6050.c). */
 				feature_frame.tof_valid = 0;
+				tof_hold++;	/* tri-state age, additive -- see VALID_MAX_HOLD */
+				feature_frame.tof_state = (tof_hold <= VALID_MAX_HOLD) ?
+					VSTATE_HELD : VSTATE_INVALID;
+				feature_frame.tof_age = tof_hold;
 			}
 		} else {
 			/* Pre-solder / pre-init: the same synthetic approach-
@@ -464,6 +642,12 @@ static void sensor_fill_frame(void)
 			if (d_mm <= SYN_D_NEAR_MM) dir = +1;	/* turn around, retreat  */
 			if (d_mm >= SYN_D_FAR_MM)  dir = -1;	/* turn around, approach */
 			feature_frame.tof_valid = 0;
+			/* No real sensor on the bus -- always INVALID, not HELD, so a
+			 * pre-solder/pre-init run never masquerades as a real held
+			 * reading in the tri-state log. tof_hold intentionally not
+			 * advanced here; it only tracks real held-vs-fresh cycles. */
+			feature_frame.tof_state = VSTATE_INVALID;
+			feature_frame.tof_age = 0;
 		}
 	}
 
@@ -476,6 +660,11 @@ static void sensor_fill_frame(void)
 	for (i = FEAT_DIST_HIST - 1; i > 0; i--)
 		feature_buf[i] = feature_buf[i - 1];
 	feature_buf[0] = d_mm;
+	/* Ambient/SigPerSPAD, added 2026-09-16: unconditional + held-over,
+	 * same discipline as feature_buf[0] above -- these are NOT part of
+	 * the hazard label, purely surface/object-type context features. */
+	feature_buf[FEAT_IDX_AMBIENT] = ambient_val;
+	feature_buf[FEAT_IDX_SIGSPAD] = sigspad_val;
 
 	/* Velocity-regression window: gated on tof_valid, NOT unconditional.
 	 * 2026-09-05 adversarial review §2.5: pushing a held/repeated d_mm
@@ -539,7 +728,103 @@ static void sensor_fill_frame(void)
 		/* PH6-1: validity travels inside the protected frame, not as a
 		 * bare flag (M-4) -- mirror this cycle's mpu6050 verdict. */
 		feature_frame.imu_valid = m->last_valid;
+		/* Tri-state, additive -- imu_valid above is untouched and still
+		 * drives every existing consumer exactly as before. */
+		if (m->last_valid) {
+			feature_frame.imu_state = VSTATE_FRESH;
+			feature_frame.imu_age = 0;
+			imu_hold = 0;
+		} else {
+			imu_hold++;
+			feature_frame.imu_state = (imu_hold <= VALID_MAX_HOLD) ?
+				VSTATE_HELD : VSTATE_INVALID;
+			feature_frame.imu_age = imu_hold;
+		}
 	}
+
+#if RAWLOG_K_TEST
+	/*
+	 * One line per accepted cycle: real timestamp (ms since boot), current
+	 * distance, current closing velocity, and this cycle's tof_valid --
+	 * everything the offline k-determination analysis needs and nothing
+	 * else. Deliberately unconditional on tof_valid itself (a held/invalid
+	 * cycle is still useful context in the raw trace) but tof_valid is
+	 * logged so held rows can be told apart from fresh ones during
+	 * analysis, same convention the real G-2 logger will use.
+	 * amb/spad added 2026-09-16: same session doubles as the bench capture
+	 * used to pick real NORM_AMBIENT_SCALE/NORM_SIGSPAD_SCALE constants
+	 * (currently PLACEHOLDERS below) instead of guessing them -- run this
+	 * across all 4 collection-protocol surfaces to see the real spread.
+	 */
+	tm_printf((UB *)"[RAWLOG] t_ms=%u d_mm=%d v_cms=%d tof_valid=%u amb=%u spad=%u\n",
+		  now.lo, (int)d_mm, (int)v_cm_s, feature_frame.tof_valid,
+		  (UW)ambient_val, (UW)sigspad_val);
+#endif
+
+#if CSV_LOG_ENABLE
+	/*
+	 * G-2 CSV feature logger. Buffers CSV_RING_LEN (= k+1) raw frames;
+	 * once full, the OLDEST buffered row is finally labelable -- its
+	 * k-frames-in-the-future is exactly THIS cycle's just-computed
+	 * d_mm/v_cm_s (G-1 label-shift decision). Values are printed already
+	 * normalized to milli-units in [-1000,1000] per G-3 (see norm1000()
+	 * and the NORM_* constants above) -- Edge Impulse ingests these as
+	 * raw features with its own DSP block disabled/passthrough (G-2).
+	 * imu_state/imu_age/tof_state/tof_age are logged so non-FRESH rows
+	 * can be excluded OFFLINE, not in firmware (G-2/§4.2 decision).
+	 */
+	{
+		csv_row_t *slot = &csv_ring[csv_ring_pos];
+		INT fi;
+
+		for (fi = 0; fi < FEAT_COUNT; fi++)
+			slot->feat[fi] = feature_buf[fi];
+		slot->imu_state = feature_frame.imu_state;
+		slot->imu_age   = feature_frame.imu_age;
+		slot->tof_state = feature_frame.tof_state;
+		slot->tof_age   = feature_frame.tof_age;
+
+		if (csv_ring_n < CSV_RING_LEN)
+			csv_ring_n++;
+
+		if (csv_ring_n >= CSV_RING_LEN) {
+			/* Row exactly CSV_LABEL_SHIFT_K frames behind csv_ring_pos
+			 * -- i.e. the slot csv_ring_pos is about to overwrite next
+			 * cycle if this were a plain ring; reading it as
+			 * (pos + 1) % LEN is equivalent to (pos - k) % LEN when
+			 * LEN == k + 1, and avoids a negative-modulo pitfall. */
+			INT oldest = (csv_ring_pos + 1) % CSV_RING_LEN;
+			csv_row_t *row = &csv_ring[oldest];
+			UW label = (d_mm < 800 && v_cm_s > 20) ? 1u : 0u;
+
+			tm_printf((UB *)"[CSV] d0=%d d1=%d d2=%d d3=%d d4=%d d5=%d d6=%d d7=%d d8=%d d9=%d "
+				  "v=%d a=%d ax=%d ay=%d az=%d amb=%d spad=%d "
+				  "ivs=%u iva=%u tvs=%u tva=%u label=%u\n",
+				  (int)norm1000(row->feat[0], NORM_DIST_OFFSET, NORM_DIST_SCALE),
+				  (int)norm1000(row->feat[1], NORM_DIST_OFFSET, NORM_DIST_SCALE),
+				  (int)norm1000(row->feat[2], NORM_DIST_OFFSET, NORM_DIST_SCALE),
+				  (int)norm1000(row->feat[3], NORM_DIST_OFFSET, NORM_DIST_SCALE),
+				  (int)norm1000(row->feat[4], NORM_DIST_OFFSET, NORM_DIST_SCALE),
+				  (int)norm1000(row->feat[5], NORM_DIST_OFFSET, NORM_DIST_SCALE),
+				  (int)norm1000(row->feat[6], NORM_DIST_OFFSET, NORM_DIST_SCALE),
+				  (int)norm1000(row->feat[7], NORM_DIST_OFFSET, NORM_DIST_SCALE),
+				  (int)norm1000(row->feat[8], NORM_DIST_OFFSET, NORM_DIST_SCALE),
+				  (int)norm1000(row->feat[9], NORM_DIST_OFFSET, NORM_DIST_SCALE),
+				  (int)norm1000(row->feat[FEAT_IDX_VCLOSE], 0, NORM_VEL_SCALE),
+				  (int)norm1000(row->feat[FEAT_IDX_ACCEL], 0, NORM_ACCEL_SCALE),
+				  (int)norm1000(row->feat[FEAT_IDX_AX], 0, NORM_ACC_MG_SCALE),
+				  (int)norm1000(row->feat[FEAT_IDX_AY], 0, NORM_ACC_MG_SCALE),
+				  (int)norm1000(row->feat[FEAT_IDX_AZ], 0, NORM_ACC_MG_SCALE),
+				  /* PLACEHOLDER constants -- see NORM_AMBIENT_SCALE/NORM_SIGSPAD_SCALE
+				   * comment above. Do not train on these until confirmed. */
+				  (int)norm1000(row->feat[FEAT_IDX_AMBIENT], 0, NORM_AMBIENT_SCALE),
+				  (int)norm1000(row->feat[FEAT_IDX_SIGSPAD], 0, NORM_SIGSPAD_SCALE),
+				  row->imu_state, row->imu_age, row->tof_state, row->tof_age, label);
+		}
+
+		csv_ring_pos = (csv_ring_pos + 1) % CSV_RING_LEN;
+	}
+#endif
 
 }
 

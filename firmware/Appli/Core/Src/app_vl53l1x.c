@@ -556,6 +556,10 @@ void vl53l1x_service(void)
 		tstats.min_mm = tstats.last_mm;
 	if (tstats.last_mm > tstats.max_mm)
 		tstats.max_mm = tstats.last_mm;
+	/* Same accepted-frame read as last_mm above, zero extra I2C cost --
+	 * added 2026-09-16, see vl53l1x_stats_t. */
+	tstats.ambient = (UW)res.Ambient;
+	tstats.sig_per_spad = (UW)res.SigPerSPAD;
 }
 
 const vl53l1x_stats_t *vl53l1x_get_stats(void)
