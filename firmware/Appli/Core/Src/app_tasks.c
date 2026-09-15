@@ -117,7 +117,7 @@
  * IMU-absent test (revert-before-ship precedent already established this
  * project).
  */
-#define RAWLOG_K_TEST		1	/* set to 1 to build the k-determination test */
+#define RAWLOG_K_TEST		0	/* set to 1 to build the k-determination test */
 
 /*
  * Tri-state validity sentinels (docs/ADVERSARIAL_REVIEW_I2C_DECISION_20260905.md
@@ -149,7 +149,7 @@
  * MUST be 0 (and RAWLOG_K_TEST already reverted to 0) before this is ever
  * built for anything but a Block 6 collection session.
  */
-#define CSV_LOG_ENABLE		0	/* set to 1 to build the Block 6 CSV feature logger */
+#define CSV_LOG_ENABLE		1	/* set to 1 to build the Block 6 CSV feature logger */
 
 #if RAWLOG_K_TEST && CSV_LOG_ENABLE
 #error "RAWLOG_K_TEST and CSV_LOG_ENABLE are mutually exclusive test builds -- run RAWLOG_K_TEST first to pick k, then flip to CSV_LOG_ENABLE for real collection, never both at once."
