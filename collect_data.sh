@@ -114,16 +114,23 @@ if [ ! -s "$PRECHECK" ]; then
     exit 1
 fi
 
-CSV_COUNT=$(grep -c "\[CSV\]" "$PRECHECK" 2>/dev/null || echo 0)
-RAWLOG_COUNT=$(grep -c "\[RAWLOG\]" "$PRECHECK" 2>/dev/null || echo 0)
-DRV_OK=$(grep -c "\[DRV\].*armed=1" "$PRECHECK" 2>/dev/null || echo 0)
-IMU_OK=$(grep -c "\[IMU\].*armed=1" "$PRECHECK" 2>/dev/null || echo 0)
+# NOTE: grep -c prints a valid count (e.g. "0") even when it finds no
+# matches, but still exits with status 1 in that case. Do NOT chain
+# "|| echo 0" onto these -- that pattern runs the fallback echo *in
+# addition to* grep's own already-valid "0" output, silently producing
+# a two-line value that breaks every numeric comparison below. Capture
+# grep's output plain, and only fall back with a shell parameter
+# expansion (which looks at emptiness, not exit status).
+CSV_COUNT=$(grep -c "\[CSV\]" "$PRECHECK" 2>/dev/null); CSV_COUNT=${CSV_COUNT:-0}
+RAWLOG_COUNT=$(grep -c "\[RAWLOG\]" "$PRECHECK" 2>/dev/null); RAWLOG_COUNT=${RAWLOG_COUNT:-0}
+DRV_OK=$(grep -c "\[DRV\].*armed=1" "$PRECHECK" 2>/dev/null); DRV_OK=${DRV_OK:-0}
+IMU_OK=$(grep -c "\[IMU\].*armed=1" "$PRECHECK" 2>/dev/null); IMU_OK=${IMU_OK:-0}
 # A CSV row with d0=1000 is the "no distance reading yet" placeholder --
 # normal for the first fraction of a second after boot, but if EVERY row
 # in a full 12-second window is still 1000, the distance sensor is not
 # actually ranging (this can happen if it's disconnected, occluded, or
 # stuck) and every recording after this would silently be useless.
-RANGING_OK=$(grep "\[CSV\]" "$PRECHECK" 2>/dev/null | grep -vc "d0=1000" || echo 0)
+RANGING_OK=$(grep "\[CSV\]" "$PRECHECK" 2>/dev/null | grep -vc "d0=1000"); RANGING_OK=${RANGING_OK:-0}
 
 echo ""
 echo "Check results:"
