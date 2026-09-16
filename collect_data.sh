@@ -43,7 +43,7 @@ detect_port() {
 }
 
 # run_capture <seconds> <outfile>
-# Detects the port fresh, runs picocom for <seconds>, and retries up
+# Detects the port fresh, listens on it via stty+cat for <seconds>, and
 # to 3 times total if it fails immediately (empty/near-empty output,
 # which is what a transient port-open failure looks like -- a real
 # successful capture always produces a lot of output over the full
@@ -61,9 +61,22 @@ run_capture() {
       echo "Retrying on $port (attempt $attempt/3)..." >&2
       sleep 2
     fi
-    timeout "$secs" picocom -b "$BAUD" "$port" | tee "$outfile"
+    # Configure the port directly with stty and read it with cat, instead
+    # of picocom. picocom manages its OWN local-terminal raw mode as well
+    # as the serial port, and that setup step is what was throwing
+    # "Cannot set the device attributes: Interrupted system call" here --
+    # a known picocom issue when its output is piped (as ours is, into
+    # tee) rather than going straight to an interactive terminal.
+    # stty + cat only touches the serial device's settings, never the
+    # local terminal, so this whole class of failure goes away.
+    if ! stty -F "$port" "$BAUD" cs8 -cstopb -parenb raw -echo -echoe -echok -crtscts 2>/dev/null; then
+      echo "Could not configure $port (attempt $attempt/3) -- retrying..." >&2
+      sleep 2
+      continue
+    fi
+    timeout "$secs" cat "$port" | tee "$outfile"
     # A real capture of $secs seconds produces many lines. Fewer than
-    # 5 means picocom failed fast (bad port, port busy, etc.) rather
+    # 5 means the capture failed fast (bad port, port busy, etc.) rather
     # than actually capturing for the full duration.
     if [ "$(wc -l < "$outfile" 2>/dev/null || echo 0)" -ge 5 ]; then
       return 0
