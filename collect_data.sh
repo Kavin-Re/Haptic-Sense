@@ -118,18 +118,36 @@ CSV_COUNT=$(grep -c "\[CSV\]" "$PRECHECK" 2>/dev/null || echo 0)
 RAWLOG_COUNT=$(grep -c "\[RAWLOG\]" "$PRECHECK" 2>/dev/null || echo 0)
 DRV_OK=$(grep -c "\[DRV\].*armed=1" "$PRECHECK" 2>/dev/null || echo 0)
 IMU_OK=$(grep -c "\[IMU\].*armed=1" "$PRECHECK" 2>/dev/null || echo 0)
+# A CSV row with d0=1000 is the "no distance reading yet" placeholder --
+# normal for the first fraction of a second after boot, but if EVERY row
+# in a full 12-second window is still 1000, the distance sensor is not
+# actually ranging (this can happen if it's disconnected, occluded, or
+# stuck) and every recording after this would silently be useless.
+RANGING_OK=$(grep "\[CSV\]" "$PRECHECK" 2>/dev/null | grep -vc "d0=1000" || echo 0)
 
 echo ""
 echo "Check results:"
-echo "  CSV rows seen:    $CSV_COUNT   (should be > 0)"
-echo "  RAWLOG rows seen: $RAWLOG_COUNT   (should be 0)"
-echo "  DRV armed:        $DRV_OK   (should be > 0)"
-echo "  IMU armed:        $IMU_OK   (should be > 0)"
+echo "  CSV rows seen:       $CSV_COUNT   (should be > 0)"
+echo "  RAWLOG rows seen:    $RAWLOG_COUNT   (should be 0)"
+echo "  DRV armed:           $DRV_OK   (should be > 0)"
+echo "  IMU armed:           $IMU_OK   (should be > 0)"
+echo "  Real distance rows:  $RANGING_OK   (should be > 0)"
 echo ""
 
 if [ "$RAWLOG_COUNT" -gt 0 ] || [ "$CSV_COUNT" -eq 0 ] || [ "$DRV_OK" -eq 0 ] || [ "$IMU_OK" -eq 0 ]; then
     echo "!!! STOP: something is not right (see the numbers above). !!!"
     echo "Do not continue. Please stop here and wait -- do not try to fix this yourself."
+    exit 1
+fi
+
+if [ "$RANGING_OK" -eq 0 ]; then
+    echo "!!! STOP: the distance sensor is not producing real readings. !!!"
+    echo "(Every row in this check was still the placeholder value.)"
+    echo "Do not continue -- recordings made right now would all be useless."
+    echo "Please stop here and wait for the project owner. If you were told it's"
+    echo "OK to try this yourself first: fully unplug the board's USB cable"
+    echo "(and wall power, if it has a separate one), wait 5 seconds, plug it"
+    echo "back in, wait 10 seconds, then run this script again from the start."
     exit 1
 fi
 
