@@ -43,8 +43,10 @@ to just redo.
 
 If everything was set up for you properly, you should have:
 
-- The circuit board, already plugged into the computer via USB, sitting on the desk facing
-  outward (there should be a small sensor window on it — that's what you're waving in front of).
+- The circuit board, already plugged into the computer via USB, sitting flat on the desk with
+  its small sensor window facing straight UP at the ceiling (that's what you're waving over —
+  not off to the side). This gives your arm full room to move without bumping into anything.
+  Nothing should be resting on top of the board or blocking that window.
 - A dark piece of cloth or a dark sleeve.
 - A light-colored clipboard or book.
 - A phone or laptop you can hold up (doesn't need to be turned on).
@@ -62,18 +64,20 @@ next — you don't need to plan this yourself. This table is just here so you kn
 
 | Category | Options | What to do |
 |---|---|---|
-| **Surface** | bare hand, dark cloth, light clipboard, phone/laptop | Hold the named object facing the sensor |
-| **Angle** | straight-on, from the left, from the right, from above, from below | Approach the sensor from that direction |
-| **Speed** | slow, normal, fast | How quickly you sweep in and out |
+| **Surface** | bare hand, dark cloth, light clipboard, phone/laptop | Hold the named object facing down toward the sensor |
+| **Angle** | straight down, from the left, from the right, from the far side, from the near side | Start your sweep from that direction, ending pointed down at the sensor |
+| **Speed** | slow, normal, fast | How quickly you sweep down and back up |
 
-For every combination, the motion is the same: **start with your hand/object at about arm's
-length (roughly 1.3 meters — about one big step back with your arm out), sweep smoothly all the
-way in until it's almost touching the sensor (a couple of centimeters away), then sweep back out,
-and repeat that in-and-out motion continuously** for the full recording, at the pace shown on
-screen.
+For every combination, the motion is the same: **start with your hand/object held up high above
+the sensor (roughly 1.3 meters up — about arm's length, fully extended toward the ceiling),
+sweep smoothly all the way down until it's almost touching the sensor (a couple of centimeters
+away), then sweep back up, and repeat that down-and-up motion continuously** for the full
+recording, at the pace shown on screen. "From the left/right/far side/near side" just means
+where your hand starts before it sweeps down — picture the sensor as the center of a clock face
+and start from that direction.
 
-Keep the motion smooth and continuous rather than a series of quick pokes — one steady sweep in,
-one steady sweep out, over and over.
+Keep the motion smooth and continuous rather than a series of quick pokes — one steady sweep
+down, one steady sweep up, over and over.
 
 ---
 

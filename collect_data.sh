@@ -173,13 +173,19 @@ declare -A SURFACE_DESC=(
   [phone]="The PHONE OR LAPTOP -- hold it flat, facing the sensor"
 )
 
+# The board sits flat on the desk with the sensor window facing straight up
+# (ceiling), so the operator has full arm mobility to wave overhead instead
+# of needing to approach a vertical sensor face. "Angle" is now which
+# compass direction the hand sweeps in FROM, all ending with a downward
+# sweep toward the sensor. Internal keys (straight/left/right/high/low) are
+# unchanged -- only what's shown on screen and in filenames' meaning changed.
 ANGLES=("straight" "left" "right" "high" "low")
 declare -A ANGLE_DESC=(
-  [straight]="STRAIGHT ON -- move directly toward the sensor, dead center"
-  [left]="FROM THE LEFT -- approach at roughly a 45-degree angle from your left"
-  [right]="FROM THE RIGHT -- approach at roughly a 45-degree angle from your right"
-  [high]="FROM ABOVE -- start higher than the sensor and angle downward as you approach"
-  [low]="FROM BELOW -- start lower than the sensor and angle upward as you approach"
+  [straight]="STRAIGHT DOWN -- hold your hand directly above the sensor and sweep straight down toward it, dead center"
+  [left]="FROM THE LEFT -- start with your hand off to your left and sweep down and across toward the sensor"
+  [right]="FROM THE RIGHT -- start with your hand off to your right and sweep down and across toward the sensor"
+  [high]="FROM THE FAR SIDE -- start with your hand on the far side of the sensor (away from you) and sweep down and toward yourself"
+  [low]="FROM THE NEAR SIDE -- start with your hand on the near side of the sensor (closest to you) and sweep down and away from yourself"
 )
 
 SPEEDS=("slow" "normal" "fast")
@@ -210,9 +216,10 @@ for surface in "${SURFACES[@]}"; do
       echo "--- Recording $N of $TOTAL ---"
       echo "Surface: $surface | Angle: $angle | Speed: ${SPEED_DESC[$speed]}"
       echo ""
-      echo "Reminder: sweep smoothly from about arm's length (~1.3m) all the way"
-      echo "in to almost touching the sensor (~5cm), then back out, and repeat"
-      echo "continuously at the pace above for the whole $CAPTURE_SECONDS seconds."
+      echo "Reminder: sweep smoothly from about arm's length above the sensor (~1.3m,"
+      echo "arm fully extended upward) all the way down to almost touching it (~5cm),"
+      echo "then sweep back up, and repeat that continuously at the pace above for the"
+      echo "whole $CAPTURE_SECONDS seconds."
       echo ""
       read -p "Press Enter to start recording (or type s and Enter to skip this one): " ans
       if [ "${ans:-}" = "s" ]; then
