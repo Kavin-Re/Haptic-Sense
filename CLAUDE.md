@@ -217,7 +217,7 @@ Corrections to earlier claims (verified against source 2026-07-06):
 
 ## 4. BOOT & SIGNING (RED ZONE #1 — silent failure mode)
 
-Flash order (strict): `ai_fsbl.hex @ 0x70000000` → `network_data.hex @ 0x70380000` (model weights) → `*-Trusted.bin @ 0x70100000` (application). External loader: `MX66UW1G45G_STM32N6570-DK.stldr` (verified from `Appli/STM32N6_MTK_Person_Detection_Appli.launch` + ST docs 2026-07-03).
+Flash order (strict): `ai_fsbl.hex @ 0x70000000` → `network_data.hex @ 0x71000000` (model weights) → `*-Trusted.bin @ 0x70100000` (application). External loader: `MX66UW1G45G_STM32N6570-DK.stldr` (verified from `Appli/STM32N6_MTK_Person_Detection_Appli.launch` + ST docs 2026-07-03).
 - Post-build signing command (verbatim from `Appli/.cproject:17`, author's hardcoded path replaced with placeholder):
   ```
   cd "${ProjDirPath}/Debug" && echo y | "<SIGNING_TOOL_PATH>/STM32_SigningTool_CLI" -bin "${ProjName}.bin" -nk -of 0x80000000 -t fsbl -o "${ProjName}-Trusted.bin" -hv 2.3 -dump "${ProjName}-Trusted.bin" -align

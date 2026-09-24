@@ -190,6 +190,36 @@
 			<locationURI>PARENT-1-PROJECT_LOC/Lib/AI_Runtime/Npu/ll_aton/ecloader.c</locationURI>
 		</link>
 		<link>
+			<name>Lib/AI_Runtime/Npu/ll_aton/ll_aton_cipher.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/Lib/AI_Runtime/Npu/ll_aton/ll_aton_cipher.c</locationURI>
+		</link>
+		<link>
+			<name>Lib/AI_Runtime/Npu/ll_aton/ll_aton_dbgtrc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/Lib/AI_Runtime/Npu/ll_aton/ll_aton_dbgtrc.c</locationURI>
+		</link>
+		<link>
+			<name>Lib/AI_Runtime/Npu/ll_aton/ll_aton_profiler.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/Lib/AI_Runtime/Npu/ll_aton/ll_aton_profiler.c</locationURI>
+		</link>
+		<link>
+			<name>Lib/AI_Runtime/Npu/ll_aton/ll_aton_reloc_callbacks.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/Lib/AI_Runtime/Npu/ll_aton/ll_aton_reloc_callbacks.c</locationURI>
+		</link>
+		<link>
+			<name>Lib/AI_Runtime/Npu/ll_aton/ll_aton_reloc_network.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/Lib/AI_Runtime/Npu/ll_aton/ll_aton_reloc_network.c</locationURI>
+		</link>
+		<link>
+			<name>Lib/AI_Runtime/Npu/ll_aton/ll_aton_stai_internal.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/Lib/AI_Runtime/Npu/ll_aton/ll_aton_stai_internal.c</locationURI>
+		</link>
+		<link>
 			<name>Lib/AI_Runtime/Npu/ll_aton/ll_aton.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/Lib/AI_Runtime/Npu/ll_aton/ll_aton.c</locationURI>

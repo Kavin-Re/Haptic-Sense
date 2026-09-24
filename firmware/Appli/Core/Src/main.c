@@ -319,7 +319,9 @@ static void NPURam_enable()
  */
 static void NPUCache_config()
 {
-  npu_cache_init();
+  /* v1.1.3-275 npu_cache.c made npu_cache_init() a private (static inline)
+   * helper and folded it into npu_cache_enable() itself -- the old runtime
+   * (v1.1.1-14) required both calls separately. Just call enable() now. */
   npu_cache_enable();
 }
 
@@ -390,11 +392,17 @@ HAL_StatusTypeDef MX_DCMIPP_ClockConfig(DCMIPP_HandleTypeDef *hdcmipp)
 }
 
 /**
- * @brief  Initialize AXI cache MSP
- * @param  hcacheaxi: AXI cache handle
+ * @brief  AXI cache clock/reset hooks (Block 8, v1.1.3-275 runtime bring-up)
+ *
+ * v1.1.3-275's npu_cache.c now defines HAL_CACHEAXI_MspInit/MspDeInit itself
+ * (non-weak) and calls out to these two __weak hooks for the actual RCC
+ * clock/reset sequencing. The old runtime (v1.1.1-14) didn't provide those
+ * Msp functions, so this app used to define them directly here -- doing so
+ * now collides at link time ("multiple definition of HAL_CACHEAXI_MspInit").
+ * Same RCC sequence, moved under the names npu_cache.c expects.
  * @retval None
  */
-void HAL_CACHEAXI_MspInit(CACHEAXI_HandleTypeDef *hcacheaxi)
+void npu_cache_enable_clocks_and_reset(void)
 {
   __HAL_RCC_CACHEAXIRAM_MEM_CLK_ENABLE();
   __HAL_RCC_CACHEAXI_CLK_ENABLE();
@@ -402,12 +410,7 @@ void HAL_CACHEAXI_MspInit(CACHEAXI_HandleTypeDef *hcacheaxi)
   __HAL_RCC_CACHEAXI_RELEASE_RESET();
 }
 
-/**
- * @brief  De-initialize AXI cache MSP
- * @param  hcacheaxi: AXI cache handle
- * @retval None
- */
-void HAL_CACHEAXI_MspDeInit(CACHEAXI_HandleTypeDef *hcacheaxi)
+void npu_cache_disable_clocks_and_reset(void)
 {
   __HAL_RCC_CACHEAXIRAM_MEM_CLK_DISABLE();
   __HAL_RCC_CACHEAXI_CLK_DISABLE();

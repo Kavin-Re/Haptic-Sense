@@ -630,7 +630,7 @@ dead board before re-running this list.
 **Flashing (order is strict):**
 - [ ] 5. External loader: `MX66UW1G45G_STM32N6570-DK.stldr`.
 - [ ] 6. `ai_fsbl.hex` @ `0x70000000`.
-- [ ] 7. `network_data.hex` @ `0x70380000` (model weights — note: README calls it
+- [ ] 7. `network_data.hex` @ `0x71000000` (model weights — note: README calls it
       `network_weights.hex`, which doesn't exist; trust the actual file).
 - [ ] 8. `<ProjName>-Trusted.bin` @ `0x70100000`.
 

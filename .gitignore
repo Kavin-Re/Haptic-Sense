@@ -36,3 +36,29 @@ docs/datasheets/
 # unfilled vl53l1_platform.c -- under a different name, which defeated that
 # rule. 4.7 MB, and re-introducing ST's stub is forbidden (HANDOFF_20260903 SS7).
 docs/_to_delete/
+
+# --- Block 6 data-collection / training scratch (added 2026-09-24) ---
+# Raw and derived CSVs produced by collect_data*.sh and the aggregation/
+# augmentation scripts. Large (several MB each), regenerable from the
+# scripts + raw serial logs, not meant to be version-controlled.
+training_data_*.csv
+held_out_*.csv
+held_out_v*_scored.csv
+ei_upload_*.csv
+boost_angle_labeled.csv
+
+# Scratch/diagnostic logs — serial captures, NPU diagnostic runs, soak-test
+# logs dumped at repo root and under logs/. Anchored to root + logs/ only
+# (NOT a bare "*.log") so it can never shadow the real evidence .log files
+# tracked under docs/evidence/phase4/ and docs/evidence/phase5/.
+/*.log
+/logs/
+
+# Edge Impulse / TFLite export scratch directories (intermediate model
+# export dumps, not the canonical model/ directory)
+model_v*_export/
+test_export_v*/
+tmp_analysis/
+
+# On-target verification scratch dump
+network_atonbuf.xSPI2.raw.forverify

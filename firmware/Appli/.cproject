@@ -81,8 +81,6 @@
 									<listOptionValue builtIn="false" value="../../Lib/screenl/Inc"/>
 									<listOptionValue builtIn="false" value="../../Lib/tracker"/>
 									<listOptionValue builtIn="false" value="../../Model/STM32N6570-DK"/>
-									<listOptionValue builtIn="false" value="../../Lib/STSW-IMG009/STSW-IMG009_v3.5.5/API/platform"/>
-									<listOptionValue builtIn="false" value="../../Lib/STSW-IMG009/STSW-IMG009_v3.5.5/API/core"/>
 									<listOptionValue builtIn="false" value="/home/kavin/haptic-sense/firmware/Appli/Lib/STSW-IMG009/STSW-IMG009_v3.5.5/API/platform"/>
 									<listOptionValue builtIn="false" value="/home/kavin/haptic-sense/firmware/Appli/Lib/STSW-IMG009/STSW-IMG009_v3.5.5/API/core"/>
 								</option>
@@ -105,6 +103,7 @@
 									<listOptionValue builtIn="false" value="STM32N6570_DK_REV"/>
 									<listOptionValue builtIn="false" value="TX_MAX_PARALLEL_NETWORKS=1"/>
 									<listOptionValue builtIn="false" value="LL_ATON_PLATFORM=LL_ATON_PLAT_STM32N6"/>
+									<listOptionValue builtIn="false" value="HAZARD_CLASSIFIER_USE_NPU"/>
 									<listOptionValue builtIn="false" value="LL_ATON_OSAL=LL_ATON_OSAL_BARE_METAL"/>
 									<listOptionValue builtIn="false" value="LL_ATON_RT_MODE=LL_ATON_RT_ASYNC"/>
 									<listOptionValue builtIn="false" value="LL_ATON_SW_FALLBACK"/>

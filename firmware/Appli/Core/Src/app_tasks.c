@@ -51,6 +51,8 @@
 #include "app_vl53l1_port.h"
 #include "app_mpu6050.h"
 #include "velocity_lsq.h"
+#include "app_hazard_classifier.h"
+#include "app_hazard_classifier_npu.h"	/* HAZARD_CLASSIFIER_USE_NPU -- see that header */
 #include "stm32n6xx_hal.h"
 #include "tk/tkernel.h"
 #include "tm/tmonitor.h"
@@ -510,10 +512,110 @@ static void inference_task_fct(INT stacd, void *exinf)
 		/* consumer: sensor_task(P) -> data_ready_sem -> inference_task(C) */
 		tk_wai_sem(data_ready_sem, 1, TMO_FEVR);
 
-		/* stub classifier — hazard = (d < 800 mm && v_close > 20 cm/s) */
+		/* Block 7/8 (2026-09-17): stub rule replaced with the Edge-Impulse-
+		 * trained quantized MLP (app_hazard_classifier.c/.h). d_mm/v_cm_s
+		 * below stay RAW -- they still feed result_slot for the urgency
+		 * calc (hazard_urgency_interval_ms) same as before. hazard itself
+		 * now comes from the model, fed the SAME 17 features it trained
+		 * on, normalized with the IDENTICAL norm1000()/NORM_* calls the
+		 * CSV_LOG_ENABLE logger below already uses -- keep both call
+		 * sites in sync if FEAT_IDX_* / NORM_* ever change (see app_hazard_
+		 * classifier.h's input-convention note). */
 		d_mm   = feature_buf[0];		/* newest distance */
 		v_cm_s = feature_buf[FEAT_IDX_VCLOSE];
-		hazard = (d_mm < HAZARD_DIST_MM && v_cm_s > HAZARD_VCLOSE_CM_S) ? 1 : 0;
+		{
+			W norm_feat[HAZ_FEAT_COUNT];
+
+			norm_feat[0] = norm1000(feature_buf[0], NORM_DIST_OFFSET, NORM_DIST_SCALE);
+			norm_feat[1] = norm1000(feature_buf[1], NORM_DIST_OFFSET, NORM_DIST_SCALE);
+			norm_feat[2] = norm1000(feature_buf[2], NORM_DIST_OFFSET, NORM_DIST_SCALE);
+			norm_feat[3] = norm1000(feature_buf[3], NORM_DIST_OFFSET, NORM_DIST_SCALE);
+			norm_feat[4] = norm1000(feature_buf[4], NORM_DIST_OFFSET, NORM_DIST_SCALE);
+			norm_feat[5] = norm1000(feature_buf[5], NORM_DIST_OFFSET, NORM_DIST_SCALE);
+			norm_feat[6] = norm1000(feature_buf[6], NORM_DIST_OFFSET, NORM_DIST_SCALE);
+			norm_feat[7] = norm1000(feature_buf[7], NORM_DIST_OFFSET, NORM_DIST_SCALE);
+			norm_feat[8] = norm1000(feature_buf[8], NORM_DIST_OFFSET, NORM_DIST_SCALE);
+			norm_feat[9] = norm1000(feature_buf[9], NORM_DIST_OFFSET, NORM_DIST_SCALE);
+			norm_feat[FEAT_IDX_VCLOSE]  = norm1000(feature_buf[FEAT_IDX_VCLOSE], 0, NORM_VEL_SCALE);
+			norm_feat[FEAT_IDX_ACCEL]   = norm1000(feature_buf[FEAT_IDX_ACCEL], 0, NORM_ACCEL_SCALE);
+			norm_feat[FEAT_IDX_AX]      = norm1000(feature_buf[FEAT_IDX_AX], 0, NORM_ACC_MG_SCALE);
+			norm_feat[FEAT_IDX_AY]      = norm1000(feature_buf[FEAT_IDX_AY], 0, NORM_ACC_MG_SCALE);
+			norm_feat[FEAT_IDX_AZ]      = norm1000(feature_buf[FEAT_IDX_AZ], 0, NORM_ACC_MG_SCALE);
+			norm_feat[FEAT_IDX_AMBIENT] = norm1000(feature_buf[FEAT_IDX_AMBIENT], 0, NORM_AMBIENT_SCALE);
+			norm_feat[FEAT_IDX_SIGSPAD] = norm1000(feature_buf[FEAT_IDX_SIGSPAD], 0, NORM_SIGSPAD_SCALE);
+
+#if defined(HAZARD_CLASSIFIER_USE_NPU) || defined(HAZARD_NPU_DIAG)
+			/* round-2 diag snapshot, for HAZARD_NPU_DIAG's log lines below --
+			 * see app_hazard_classifier_npu.h's hazard_npu_diag_t comment.
+			 * Round 1 (read-before-reset) didn't fix the constant-127 output;
+			 * this narrows down where in the call the value goes wrong. */
+			hazard_npu_diag_t npu_diag_info;
+			UB hazard_npu_bit = hazard_classify_npu(norm_feat, &npu_diag_info);
+#endif
+#ifdef HAZARD_CLASSIFIER_USE_NPU
+			hazard = hazard_npu_bit;
+#else
+			hazard = hazard_classify(norm_feat);
+#endif
+			/* SAFETY-NET FALLBACK (2026-09-19). Live capture (logs/
+			 * live_v10_validate_20260919_1113.log) confirmed the trained
+			 * classifier is NOT monotonic in the danger direction: scored
+			 * offline against the exact live feature vectors captured --
+			 * d0=-1000,v=864 (true point-blank, near-max closing speed)
+			 * -> prob=0.004; d0=-561,v=488 (the ~300-400mm band the real
+			 * training data actually has density in) -> prob=0.33-0.40.
+			 * This is the near-field dead zone already documented offline
+			 * (SYNTH_DATA_METHODOLOGY.md, held_out_v10 per-distance-band
+			 * eval), now confirmed on real hardware -- the model goes
+			 * quiet exactly where the hazard is most acute. OR in the
+			 * original Phase 4/CLAUDE.md §6 stub rule (d_mm/v_cm_s already
+			 * computed above for the CSV logger) as a backstop so the
+			 * device still responds at true close range even where the ML
+			 * model's live confidence collapses. Purely additive -- never
+			 * suppresses a model-side hazard=1, only adds coverage. */
+			if (d_mm < (W)HAZARD_DIST_MM && v_cm_s > (W)HAZARD_VCLOSE_CM_S) {
+				hazard = 1u;
+			}
+#ifdef HAZARD_NPU_DIAG
+			/* Block 8c bring-up only: runs the NPU path alongside whichever
+			 * path actually drives `hazard` above, and logs any disagreement.
+			 * Does NOT change the decision -- diagnostic only. See
+			 * claude/BLOCK6_TO_SUBMISSION_STATUS_20260916.md section 2 item 4c. */
+			{
+				static UW npu_diag_seq;
+				static UW npu_diag_addr_printed;
+				UB hazard_cpu_bit;
+#ifdef HAZARD_CLASSIFIER_USE_NPU
+				hazard_cpu_bit = hazard_classify(norm_feat);
+#else
+				hazard_cpu_bit = hazard;
+#endif
+				npu_diag_seq++;
+				if (!npu_diag_addr_printed) {
+					/* once only: confirms/refutes the documented in/out aliasing.
+					 * Plain %x (no l/width modifiers) to match this file's other
+					 * tm_printf hex usages -- untested whether tm_printf's minimal
+					 * printf supports anything fancier. */
+					tm_printf((UB *)"[NPUDIAG] addrs in=0x%x out=0x%x\n",
+						  (unsigned int)npu_diag_info.in_addr,
+						  (unsigned int)npu_diag_info.out_addr);
+					npu_diag_addr_printed = 1;
+				}
+				if (hazard_cpu_bit != hazard_npu_bit) {
+					tm_printf((UB *)"[NPUDIAG] seq=%u MISMATCH cpu=%u npu=%u pre=%d postq=%d poste=%d\n",
+						  npu_diag_seq, hazard_cpu_bit, hazard_npu_bit,
+						  (int)npu_diag_info.raw_pre, (int)npu_diag_info.raw_post_quant,
+						  (int)npu_diag_info.raw_post_epoch);
+				} else if ((npu_diag_seq % 50u) == 0u) {
+					/* periodic heartbeat so a quiet run doesn't look hung */
+					tm_printf((UB *)"[NPUDIAG] seq=%u match cpu=%u npu=%u pre=%d postq=%d poste=%d\n",
+						  npu_diag_seq, hazard_cpu_bit, hazard_npu_bit,
+						  (int)npu_diag_info.raw_pre, (int)npu_diag_info.raw_post_quant,
+						  (int)npu_diag_info.raw_post_epoch);
+				}
+			}
+#endif
+		}
 
 		/* paired-semaphore handshake (Red Zone #4):
 		 * consumer: hazard_task(P) -> result_free_sem -> inference_task(C) */
@@ -1419,6 +1521,19 @@ void app_tasks_run(void)
 
 	/* --- 2. GPIO + instrumentation --- */
 	app_gpio_init();
+
+#if defined(HAZARD_CLASSIFIER_USE_NPU) || defined(HAZARD_NPU_DIAG)
+	/* --- 2.5. NPU model init (Block 8, opt-in -- see app_hazard_classifier_
+	 * npu.h's STATUS note: validated in isolation on real hardware via ST
+	 * Edge AI Developer Cloud, NOT yet hardware-tested as part of this live
+	 * firmware). Must run before inference_task_fct's first
+	 * hazard_classify_npu() call, so before tasks start below.
+	 * HAZARD_NPU_DIAG (Block 8c bring-up only): runs the NPU path
+	 * alongside the shipped CPU path and logs any disagreement over serial,
+	 * without changing which classifier's result actually drives hazard.
+	 * --- */
+	hazard_npu_init();
+#endif
 
 	/* --- 3. Tasks, created+started highest priority first: each blocks on
 	 * its consumer semaphore immediately, so nothing runs until sensor_task
