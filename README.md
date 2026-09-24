@@ -43,6 +43,7 @@ firmware/           STM32CubeIDE project (µT-Kernel 3.0 + the sensor/actuator/i
   Model/             Generated NPU model artifacts (network.c/.h, network_data.hex) — the
                      inference code the board actually runs
   Lib/, STM32Cube_FW_N6/   Vendored ST/NPU runtime libraries (not tracked in git — see below)
+binaries/            ai_fsbl.hex — the first-stage bootloader flashed at 0x70000000
 model/               Model-generation entry point (generate-n6-model.sh, NeuralART config)
 docs/                Design docs, verification evidence, block-by-block build history, and the
                      honest plan-vs-build divergence writeups (see docs/PROJECT_DEFENSE.md)
@@ -103,6 +104,12 @@ Producer/consumer handoffs between tasks use paired counting semaphores
 ever read half-written. The µT-Kernel API is used throughout — no FreeRTOS calls appear
 anywhere in this codebase.
 
+The Hazard Alert task's "GPIO only" rule is about how it *drives* the motor, not about the
+DRV2605L being wired for GPIO: the driver sits on I2C1, but its `IN/TRIG` pin (PE13) supports
+a hardware edge-trigger playback mode, so the priority-1 task fires a haptic pulse with a
+GPIO edge alone — no bus transaction on the hazard path. I2C is used only during
+initialization (on the priority-3 task) to configure the driver's playback library and mode.
+
 **Measured, hardware-verified (see `docs/evidence/phase4/`):** worst-case preemption latency
 3.375 µs over 2,229 events under synthetic CPU load; baseline (no load) statistically
 identical. This is the number behind every "sub-millisecond, deterministic" claim in this
@@ -137,18 +144,38 @@ Pipeline: hardware data collection → Edge Impulse (feature engineering + train
 
 ## License
 
-This project is released under the **GNU General Public License v3.0** — see `LICENSE`.
+**This repo mixes licenses by component — read this section, not just the `LICENSE` file,
+before reusing anything.**
 
-Individual source files may carry their own SPDX license header where that reflects their
-actual provenance (for example, code written to match a vendor's own permissively-licensed
-API surface, or files ported from the µT-Kernel BSP reference implementation under T-License
-2.1/2.2 — see `CLAUDE.md` §7 and §5). Those headers govern the individual file; `LICENSE`
-governs the combined work. Vendored third-party libraries (`firmware/Lib/AI_Runtime/`,
-`firmware/STM32Cube_FW_N6/`) are **not** included in this repository and remain under ST's own
-license terms.
+- **This project's own original source** (application/task code under `firmware/Appli/Core/`,
+  the docs under `docs/`, this README) is released under the **GNU General Public License
+  v3.0** — see `LICENSE`.
+- **The µT-Kernel 3.0 BSP2 port** (`firmware/Appli/mtk3_bsp2/`) is TRON Forum / Ken Sakamura
+  code under **T-License 2.1/2.2**, unmodified except for two config-value edits noted in
+  those files' headers. T-License is not GPL-compatible and is **not** relicensed by
+  `LICENSE` above — it keeps its own terms, which are included at
+  `firmware/Appli/mtk3_bsp2/mtkernel/docs/TEF000-219-200401.pdf`. Any modified copy carries a
+  changed-file note per T-License 2.2 Art. 3.2.
+- **Generated/vendor-derived model and boot artifacts** (`firmware/Model/STM32N6570-DK/`,
+  `binaries/ai_fsbl.hex`, the linker script, `model/generate-n6-model.sh`) originate from ST's
+  STM32N6 sample tooling under **ST's SLA0044** and keep that license.
+- **Vendored third-party libraries** (`firmware/Lib/AI_Runtime/`, `firmware/STM32Cube_FW_N6/`)
+  are **not tracked in this repository at all** and remain under ST's own license terms —
+  obtain them separately (see Repository layout, above).
+- **`firmware/Appli/Core/Inc/serial_protocol.h` and `firmware/Appli/Core/Src/mtkernel_bsp.c`
+  carry an ST copyright header but did not originate from an ST repository** — their actual
+  provenance and license status is unresolved as of this writing; see the open item in the
+  project's own audit trail before treating them as cleared for redistribution.
+
+GPL-3.0 governs this project's own contribution; it does not and cannot relicense the
+T-Licensed or SLA0044-covered components above, which are included/referenced only under
+their own original terms.
 
 ## Acknowledgements
 
 Built on the µT-Kernel 3.0 BSP2 port for STM32N6570-DK
-([tron-forum/mtk3_bsp2](https://github.com/tron-forum/mtk3_bsp2)) and ST's NeuralART /
-X-CUBE-AI tooling for on-device NPU inference.
+([tron-forum/mtk3_bsp2](https://github.com/tron-forum/mtk3_bsp2), v1.00.03) and ST's NeuralART
+/ X-CUBE-AI tooling for on-device NPU inference. Bring-up on this board was informed by
+[supungamlath/STM32N6_Survivor_Detection](https://github.com/supungamlath/STM32N6_Survivor_Detection)
+and ST's official `STM32N6-GettingStarted-ObjectDetection` sample, from which the boot
+signing flow, linker script, and model-generation script are adapted.
