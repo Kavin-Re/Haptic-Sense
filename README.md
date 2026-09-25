@@ -19,7 +19,9 @@ and drives a haptic pulse whose rate scales with urgency. The whole sensing-to-a
 runs under a real-time task architecture on **µT-Kernel 3.0**, with hardware-measured
 worst-case preemption latency of **3.375 µs** (logic analyzer, Phase 4) and **4.19 µs**
 (in-firmware cycle counter, 30-minute soak on the full pipeline): both far inside the
-sub-millisecond target the project set for itself.
+sub-millisecond target the project set for itself. Both figures time the handoff from the
+inference task posting its result to the priority-1 hazard task waking, not sensor-to-motor
+time, which is dominated by the ~37 ms (~27 Hz) sensor frame period.
 
 The single-zone ToF sensor cannot measure direction, and this project does not claim it does:
 feedback here is strictly "how urgent," never "which way."
@@ -171,7 +173,9 @@ initialization (on the priority-3 task) to configure the driver's playback libra
 
 In the same 30-minute soak, 48,242 frames went through the paired-semaphore handoff with zero
 torn reads (`canary_err = 0`). The two latency figures use different methods and different
-builds; both are more than 200× under 1 ms.
+builds; both are more than 200× under 1 ms. Both measure the inference-task-posts-result →
+hazard-task-wakes handoff (the "< 1 ms path" in the task table), not end-to-end
+sensor-to-motor latency, which is set by the ~37 ms sensor frame period.
 
 ## The on-device model
 
