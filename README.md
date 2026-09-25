@@ -182,16 +182,16 @@ Pipeline: hardware data collection → Edge Impulse (feature engineering + train
 **This repo mixes licenses by component — read this section, not just the `LICENSE` file,
 before reusing anything.**
 
-- **This project's own firmware source files** — the files under `firmware/Appli/Core/` that
-  start with an `SPDX-License-Identifier` line — are under the license that line names,
-  currently **Apache-2.0**.
-- **Everything else original to this project** (docs, scripts, this README) is released under
-  the **GNU General Public License v3.0** — see `LICENSE`.
+- **Everything original to this project** — the firmware source under `firmware/Appli/Core/`
+  that carries an `SPDX-License-Identifier: Apache-2.0` header, the docs, this README, and the
+  data-collection/training scripts — is released under the **Apache License 2.0**, see
+  `LICENSE`. This was chosen specifically because it doesn't try to impose terms on the
+  T-Licensed and ST-licensed components below, unlike a copyleft license would.
 - **The µT-Kernel 3.0 BSP2 port** (`firmware/Appli/mtk3_bsp2/`) is TRON Forum / Ken Sakamura
   code under **T-License 2.1/2.2**, unmodified except for configuration values and one
   patched driver, each noted in the changed file's header (`config/config.h`,
-  `config/config_bsp/stm32_cube/config_bsp.h`, `mtkernel/device/common/drvif/msdrvif.c`).
-  T-License is not GPL-compatible and is **not** relicensed by `LICENSE` above — it keeps its own terms, which are included at
+  `config/config_bsp/stm32_cube/config_bsp.h`, `mtkernel/device/common/drvif/msdrvif.c`). It
+  keeps its own terms, included at
   `firmware/Appli/mtk3_bsp2/mtkernel/docs/TEF000-219-200401.pdf`. Any modified copy carries a
   changed-file note per T-License 2.2 Art. 3.2.
 - **Generated/vendor-derived model and boot artifacts** (`firmware/Model/STM32N6570-DK/`,
@@ -209,8 +209,9 @@ before reusing anything.**
 - Two files that carried an incorrect ST header (`serial_protocol.h`, `mtkernel_bsp.c`) were
   replaced with original code on 2026-09-25 — see `docs/PROVENANCE.md`.
 
-Neither `LICENSE` nor the per-file headers relicense the T-Licensed or ST-licensed components
-above; those are included or referenced only under their own original terms.
+`LICENSE` covers this project's own original contribution only. It does not and cannot
+relicense the T-Licensed or ST-licensed components above; those are included or referenced
+only under their own original terms.
 
 ## Acknowledgements
 

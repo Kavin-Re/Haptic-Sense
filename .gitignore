@@ -71,3 +71,8 @@ network_atonbuf.xSPI2.raw.forverify
 
 # Model v6 (2026-09-18): trained, never converted into firmware artifacts. Kept locally as history.
 /haptic_sense_hazard_v6.tflite
+
+# Internal contest-negotiation notes — not part of the technical submission,
+# kept locally, deliberately not published
+docs/CONTEST_LOGISTICS.md
+docs/PACK_SHIP_SUBMIT_CHECKLIST_20260915.md
