@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-Haptic-Sense -- self-serve live-capture analyzer. No Claude session needed
-to run this; it's pure stdlib. Written 2026-09-19 as a backup so threshold
-validation isn't blocked on Claude being available.
+Haptic-Sense -- live-capture analyzer, pure stdlib. Written 2026-09-19 so
+threshold validation could be done at the bench with no other tooling.
 
-Parses [NPUDIAG] lines from a live serial capture (see
-docs/FINAL_STRETCH_RUNBOOK_20260919.md Phase B for how to make one) and
+Parses [NPUDIAG] lines from a live serial capture (a build with
+HAZARD_NPU_DIAG defined, logged from the ST-LINK virtual COM port) and
 reports, for the CURRENT v10 PROVISIONAL thresholds, how many frames each
 path would flag as hazard -- using the RAW pre/postq bytes already in the
 log, so this works even though the log was captured with the OLD firmware

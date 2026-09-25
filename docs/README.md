@@ -27,8 +27,8 @@ the firmware source is the final word.
 
 Some documents cite files that are not in this repository:
 
-- `CONTEST_LOGISTICS.md`, `PACK_SHIP_SUBMIT_CHECKLIST_20260915.md`: internal contest and
-  shipping logistics, withheld.
+- `CONTEST_LOGISTICS.md`, `PACK_SHIP_SUBMIT_CHECKLIST_20260915.md`,
+  `FINAL_STRETCH_RUNBOOK_20260919.md`: internal contest and shipping logistics, withheld.
 - `BLOCK2_LOG.md`, `ML_LABEL_DECISION.md`, `ADVERSARIAL_REVIEW_I2C_DECISION_20260905.md`,
   `evidence/phase5/PHASE5_I2C_TWISTED_JOINT_20260905.md`, and paths under `claude/`: working
   notes kept outside the repository.
