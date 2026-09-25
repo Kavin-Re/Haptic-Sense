@@ -62,3 +62,9 @@ tmp_analysis/
 
 # On-target verification scratch dump
 network_atonbuf.xSPI2.raw.forverify
+
+# Not redistributable: TRON Forum spec text ("do not transcribe or duplicate without consent")
+# and an unofficial English translation of the BSP2 manual; neither is in tron-forum/mtk3_bsp2.
+# Kept locally for reference. See docs/PROVENANCE.md.
+/firmware/Appli/mtk3_bsp2/doc/utk3_spec.txt
+/firmware/Appli/mtk3_bsp2/doc/bsp2_stm32_cube_en.md

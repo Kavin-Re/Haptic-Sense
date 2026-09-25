@@ -11,6 +11,16 @@
  *----------------------------------------------------------------------
  */
 
+/*
+ * Modified for haptic-sense (changed-file notice, T-License):
+ *   Differs from upstream in: CNF_TIMER_PERIOD 10 -> 1 (1 ms system tick),
+ *   CNF_MAX_MTXID 4 -> 8, USE_IMALLOC 1 -> 0 (static allocation only; see
+ *   msdrvif.c). These values came with the bring-up reference project the
+ *   port was imported from (2026-07-04) and are relied on by this build.
+ *   Whitespace in the #define lines was also reformatted.
+ *   Original: tron-forum/mtk3_bsp2 v1.00.03.
+ */
+
 #ifndef _MTKBSP_TK_CONFIG_
 #define _MTKBSP_TK_CONFIG_
 /*

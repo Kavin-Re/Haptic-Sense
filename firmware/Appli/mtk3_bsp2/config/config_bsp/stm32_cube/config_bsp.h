@@ -12,6 +12,13 @@
  */
 
 /*
+ * Modified for haptic-sense (changed-file notice, T-License):
+ *   2026-07-06: comment added to DEVCNF_USE_HAL_IIC explaining why it stays 0;
+ *   no configuration value changed. Header comment re-indented.
+ *   Original: tron-forum/mtk3_bsp2 v1.00.03.
+ */
+
+/*
  *	config_bsp.h
  *	BSP Configuration Definition (STM32Cube)
  */
