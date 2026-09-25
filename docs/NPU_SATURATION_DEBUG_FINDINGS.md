@@ -7,6 +7,13 @@ was unplugged for this session (see §6 for the one remaining hardware step).
 **Scope:** optional NPU path only. `HAZARD_CLASSIFIER_USE_NPU` remains undefined; the CPU
 path (`app_hazard_classifier.c`) is untouched and ships regardless.
 
+> **Update 2026-09-25 (status as shipped).** The fix was applied and confirmed on hardware:
+> `network_data.hex` itself now carries the `0x71000000` address (the separate
+> `network_data_0x71000000.hex` was byte-identical and has been removed), and in the
+> 2026-09-19 30-minute soak the NPU output varies with the scene
+> (`docs/evidence/phase6/`). `HAZARD_CLASSIFIER_USE_NPU` is now defined in the build, so the
+> NPU path is the one that shipped. Sections below are the original 2026-09-18 record.
+
 ---
 
 ## 1. Root cause — the weights are flashed 12.5 MB away from where the NPU reads them
