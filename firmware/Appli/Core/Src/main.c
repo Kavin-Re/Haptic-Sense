@@ -22,7 +22,7 @@
 #include "app_config.h"
 #include "app_fuseprogramming.h"
 #include "npu_cache.h"
-#include "serial_protocol.h"
+#include "boot_log.h"
 #include "stm32n6570_discovery.h"
 #include "stm32n6570_discovery_bus.h"
 #include "stm32n6570_discovery_lcd.h"
@@ -86,9 +86,9 @@ int main(void)
  */
 EXPORT INT usermain(void)
 {
-  SERIAL_MSG(LEVEL_INFO, MODULE_RTOS, EVENT_RTOS_START);
+  boot_log(BOOT_LOG_MOD_RTOS, "RTOS_START");
 
-  SERIAL_MSG_STR(LEVEL_INFO, MODULE_RTOS, EVENT_TASK_CREATE, "task", "main_thread");
+  boot_log_str(BOOT_LOG_MOD_RTOS, "TASK_CREATE", "task", "main_thread");
   T_CTSK task_config;
 
   task_config.itskpri = 15;
@@ -99,10 +99,10 @@ EXPORT INT usermain(void)
 
   main_task_id = tk_cre_tsk(&task_config);
 
-  SERIAL_MSG_TASK(LEVEL_INFO, MODULE_RTOS, EVENT_TASK_START, "main_thread", main_task_id);
+  boot_log_task(BOOT_LOG_MOD_RTOS, "TASK_START", "main_thread", main_task_id);
   tk_sta_tsk(main_task_id, 0);
 
-  SERIAL_MSG_TASK(LEVEL_INFO, MODULE_RTOS, EVENT_TASK_READY, "main_thread", main_task_id);
+  boot_log_task(BOOT_LOG_MOD_RTOS, "TASK_READY", "main_thread", main_task_id);
 
   tk_slp_tsk(TMO_FEVR);
 
@@ -111,9 +111,9 @@ EXPORT INT usermain(void)
 
 static void main_thread_fct(INT stacd, void *exinf)
 {
-  SERIAL_MSG(LEVEL_INFO, MODULE_INIT, EVENT_SYSTEM_START);
+  boot_log(BOOT_LOG_MOD_INIT, "SYSTEM_START");
 
-  SERIAL_MSG(LEVEL_INFO, MODULE_INIT, EVENT_NVIC_CONFIG);
+  boot_log(BOOT_LOG_MOD_INIT, "NVIC_CONFIG");
   uint32_t preemptPriority;
   uint32_t subPriority;
   IRQn_Type i;
@@ -122,18 +122,18 @@ static void main_thread_fct(INT stacd, void *exinf)
   for (i = PVD_PVM_IRQn; i <= LTDC_UP_ERR_IRQn; i++)
     HAL_NVIC_SetPriority(i, preemptPriority, subPriority);
 
-  SERIAL_MSG(LEVEL_INFO, MODULE_INIT, EVENT_RAM_INIT);
+  boot_log(BOOT_LOG_MOD_INIT, "RAM_INIT");
   BSP_XSPI_RAM_Init(0);
   BSP_XSPI_RAM_EnableMemoryMappedMode(0);
 
-  SERIAL_MSG(LEVEL_INFO, MODULE_INIT, EVENT_FLASH_INIT);
+  boot_log(BOOT_LOG_MOD_INIT, "FLASH_INIT");
   BSP_XSPI_NOR_Init_t NOR_Init;
   NOR_Init.InterfaceMode = BSP_XSPI_NOR_OPI_MODE;
   NOR_Init.TransferRate = BSP_XSPI_NOR_DTR_TRANSFER;
   BSP_XSPI_NOR_Init(0, &NOR_Init);
   BSP_XSPI_NOR_EnableMemoryMappedMode(0);
 
-  SERIAL_MSG(LEVEL_INFO, MODULE_INIT, EVENT_CLOCKS_CONFIG);
+  boot_log(BOOT_LOG_MOD_INIT, "CLOCKS_CONFIG");
   LL_BUS_EnableClockLowPower(~0);
   LL_MEM_EnableClockLowPower(~0);
   LL_AHB1_GRP1_EnableClockLowPower(~0);
@@ -149,10 +149,10 @@ static void main_thread_fct(INT stacd, void *exinf)
   LL_APB5_GRP1_EnableClockLowPower(~0);
   LL_MISC_EnableClockLowPower(~0);
 
-  SERIAL_MSG(LEVEL_INFO, MODULE_INIT, EVENT_SYSTEM_READY);
+  boot_log(BOOT_LOG_MOD_INIT, "SYSTEM_READY");
   app_tasks_run();	/* Phase 4: four-task architecture (Phase 3 heartbeat_run excluded) */
 
-  SERIAL_MSG(LEVEL_INFO, MODULE_INIT, "APP_EXIT");
+  boot_log(BOOT_LOG_MOD_INIT, "APP_EXIT");
   tk_ext_tsk();
 }
 
