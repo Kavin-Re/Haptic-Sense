@@ -6,6 +6,14 @@
 | `generate-n6-model.sh` | ST Edge AI / Neural-ART conversion to `firmware/Model/STM32N6570-DK/` (weights placed at `0x71000000`). |
 | `user_neuralart.json` | Neural-ART compiler profile used by the script. |
 
+**Regenerating the NPU artifacts needs one file this repo does not include.**
+`user_neuralart.json` points at `./my_mpools/stm32n6-app2.mpool`, the Neural-ART memory-pool
+description from ST's STM32N6 sample application
+([STM32N6-GettingStarted-ObjectDetection](https://github.com/STMicroelectronics/STM32N6-GettingStarted-ObjectDetection),
+where it is currently `Model/my_mpools/stm32n6-app2_STM32N6570-DK.mpool`). It is ST's file
+and is not redistributed here. The firmware does not need it: the generated artifacts in
+`firmware/Model/STM32N6570-DK/` are committed and build as they are.
+
 ## How v4 was matched to the firmware (checked 2026-09-25)
 
 - All six weight/bias tensors equal `firmware/Appli/Core/Inc/app_hazard_classifier_weights.h`
