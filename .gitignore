@@ -68,3 +68,6 @@ network_atonbuf.xSPI2.raw.forverify
 # Kept locally for reference. See docs/PROVENANCE.md.
 /firmware/Appli/mtk3_bsp2/doc/utk3_spec.txt
 /firmware/Appli/mtk3_bsp2/doc/bsp2_stm32_cube_en.md
+
+# Model v6 (2026-09-18): trained, never converted into firmware artifacts. Kept locally as history.
+/haptic_sense_hazard_v6.tflite
