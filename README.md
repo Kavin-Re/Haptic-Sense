@@ -37,6 +37,36 @@ All three peripherals share a single I2C1 bus (PH9 = SCL, PC1 = SDA) — see `CL
 the full pin map, pull-up budget, and per-device wiring notes. The board is USB-powered with no
 battery installed.
 
+## Operating the device
+
+The unit ships already flashed and set to boot from flash. No PC, terminal, or debugger is
+needed to run it.
+
+1. **Check the boot switches:** BOOT0 and BOOT1 (PA6/SW1) both LOW (Flash Boot). Keep the
+   sensor breakouts connected to the Discovery board.
+2. **Power it:** plug a USB-C cable into the board's ST-LINK USB-C port. A C-to-C cable from a
+   USB-C charger or PC port is recommended; a Type-A-to-C cable was measured to boot this build,
+   but ST documents a ~550 mA limit for that case.
+3. **Check it is alive:** after boot, the green user LED **LD1** toggles once per second. That
+   is the lowest-priority heartbeat task; if it is blinking, the scheduler and all four tasks
+   are running.
+4. **Trigger an alert:** move a hand, or a flat object such as a book, **toward** the VL53L1X
+   sensor window along its line of sight. The sensor measures up to roughly 1.3 m. An alert
+   fires when an object inside **80 cm** is **closing faster than 20 cm/s** (the fixed rule),
+   or when the on-device model predicts that is about to happen (see "The on-device model").
+   A hand held still, or moving away, does not trigger it; this is deliberate.
+5. **Read the vibration:** each alert is a short buzz from the ERM motor, repeated while the
+   hazard lasts. The **repeat rate is the urgency**: about 400 ms between buzzes at 20 cm/s,
+   4 ms shorter for every extra cm/s, down to a 75 ms floor at about 100 cm/s and faster. So a
+   faster approach buzzes faster. It never indicates direction; the single-zone sensor cannot
+   measure it.
+6. **Stop it:** unplug the USB cable. There is no power switch and no state to save.
+
+**Optional, with a PC:** the ST-LINK virtual COM port (USART1, 115200 baud, 8N1) prints status
+lines. The `[HB]` line appears once per second: `frames` = sensor frames processed, `inf` =
+inferences run, `hazard` = alerts fired since boot, `canary_err` = torn-read detector (should
+stay 0).
+
 ## Repository layout
 
 ```
@@ -54,6 +84,7 @@ docs/                Design docs, verification evidence, block-by-block build hi
                      honest plan-vs-build divergence writeups (see docs/PROJECT_DEFENSE.md)
 docs/evidence/       Logic-analyzer captures, soak-test logs, and timing-campaign data that back
                      every hard performance claim in this README and in docs/PROJECT_DEFENSE.md
+docs/README.md       Index: which docs describe the shipped state, which are build history
 docs/PROVENANCE.md   Where each non-original file came from, and what was removed or replaced
 CLAUDE.md            The project's own engineering rulebook — hardware map, RTOS task rules,
                      red-zone tracking, code standards. The most detailed technical reference
@@ -74,7 +105,9 @@ Toolchain: STM32CubeIDE ≥ 1.19.0, STM32CubeProgrammer ≥ 2.20.0 (older versio
 wrong Cortex-M55 flags), on Linux or Windows. The submitted build used STM32CubeIDE 2.2.0
 (GNU Tools for STM32 14.3.rel1) and STM32CubeProgrammer 2.23.0.
 
-1. Import `firmware/Appli` into STM32CubeIDE.
+1. Import `firmware/Appli` into STM32CubeIDE (File → Import → Existing Projects into
+   Workspace). The project is named `STM32N6_MTK_Person_Detection_Appli`, a name inherited
+   from the sample it was built from; that is the `<ProjName>` used below.
 2. Place the two vendored dependencies noted above at `firmware/Lib/AI_Runtime/` and
    `firmware/STM32Cube_FW_N6/`.
 3. Build (Debug configuration — this project has no separate Release build; the committed
