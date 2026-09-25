@@ -34,5 +34,9 @@ Some documents cite files that are not in this repository:
   notes kept outside the repository.
 - `datasheets/*_datasheet.pdf`, `mpu6050_*.pdf`: vendor datasheets (TI, ST, InvenSense),
   not redistributed. Get them from the vendors.
+- The STM32N6570-DK board schematic (MB1939-N6570-C02), cited as "schematic-verified" in
+  `CLAUDE.md`: download it from ST's
+  [STM32N6570-DK product page](https://www.st.com/en/evaluation-tools/stm32n6570-dk.html)
+  (CAD Resources → Schematic Pack).
 - `logs/*.log`: raw serial captures. The ones that back published figures are in
   `evidence/`.

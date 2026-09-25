@@ -35,7 +35,11 @@ feedback here is strictly "how urgent," never "which way."
 
 All three peripherals share a single I2C1 bus (PH9 = SCL, PC1 = SDA) — see `CLAUDE.md` §2 for
 the full pin map, pull-up budget, and per-device wiring notes. The board is USB-powered with no
-battery installed.
+battery installed. The board schematic (MB1939-N6570-C02) is not redistributed here; it is a free
+download from ST under ST's own license terms, on the
+[STM32N6570-DK product page](https://www.st.com/en/evaluation-tools/stm32n6570-dk.html)
+(CAD Resources → Schematic Pack, or
+[direct PDF](https://www.st.com/resource/en/schematic_pack/mb1939-n6570-c02-schematic.pdf)).
 
 ## Operating the device
 
