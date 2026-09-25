@@ -84,8 +84,9 @@ binaries/            ai_fsbl.hex — the first-stage bootloader flashed at 0x700
 model/               The trained model (.tflite) the firmware is generated from, the
                      Neural-ART generation script and config — see model/README.md
 *.py, *.sh (root)    Data collection, aggregation, augmentation and evaluation tools
-docs/                Design docs, verification evidence, block-by-block build history, and the
-                     honest plan-vs-build divergence writeups (see docs/PROJECT_DEFENSE.md)
+docs/                Design docs, verification evidence, and block-by-block build history,
+                     including docs/PROJECT_DEFENSE.md (the 2026-07-12 silent-failure
+                     catalogue and verification ledger)
 docs/evidence/       Logic-analyzer captures, soak-test logs, and timing-campaign data that back
                      every hard performance claim in this README and in docs/PROJECT_DEFENSE.md
 docs/README.md       Index: which docs describe the shipped state, which are build history
@@ -203,8 +204,9 @@ Pipeline: hardware data collection → Edge Impulse (feature engineering + train
 
 ## Known limitations
 
-- This is a benchtop prototype, not a wearable enclosure — see `docs/PROJECT_DEFENSE.md` for
-  the honest plan-vs-build divergence record kept throughout the build.
+- This is a benchtop prototype, not a wearable enclosure. Where the build diverged from the
+  original plan, it is recorded in this section and in `model/README.md` (which model the
+  firmware actually carries, and why its threshold and weights come from different models).
 - A single-zone ToF sensor has no directional resolution. Feedback here communicates urgency
   only, never direction — this is a deliberate scope decision, not a missing feature.
 - The model's decision threshold in `app_hazard_classifier.h` (`HAZ_PROB_THRESH_Q = -51`) was
