@@ -1,17 +1,18 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  *
- * app_tasks.c — Phase 4 task architecture with synthetic data (Haptic-Sense)
+ * app_tasks.c — four-task µT-Kernel architecture (Haptic-Sense)
  *
- * Four-task µT-Kernel architecture per CLAUDE.md §3 / Phase 4 design doc.
- * ZERO I2C (DEVCNF_USE_HAL_IIC stays 0), zero NPU — synthetic sensor data
- * exercises the identical buffers, semaphores and task bodies that Phase 5
- * (I2C DMA) and Phase 6 (NeuralART) will swap payloads into.
+ * Task structure per CLAUDE.md §3 / Phase 4 design doc. Built in Phase 4 on
+ * synthetic data; Phases 5-6 swapped in the real payloads without changing
+ * the buffers, semaphores or task bodies: VL53L1X + MPU6050 reads over I2C1
+ * DMA (the app owns HAL I2C; DEVCNF_USE_HAL_IIC stays 0) and the NeuralART
+ * NPU classifier (HAZARD_CLASSIFIER_USE_NPU, the shipped build).
  *
  * Task inventory (TK_PRI, lower = higher priority):
- *   1  hazard_task     GPIO only. NO I2C, NO printf, NO blocking I/O — ever.
- *   2  inference_task  stub classifier. NO I2C, NO printf.
- *   3  sensor_task     synthetic generator @ 50 Hz. ALL future I2C lives here.
+ *   1  hazard_task     GPIO only (DRV2605L TRIG, PE13). NO I2C/printf/blocking.
+ *   2  inference_task  17-feature classifier OR distance/velocity rule. NO I2C.
+ *   3  sensor_task     ToF + IMU over I2C1, 20 ms pacing. ALL I2C lives here.
  *  10  heartbeat_task  1 Hz status printer — the ONLY task allowed printf.
  *  15  main_thread     (main.c) creates everything via app_tasks_run(), exits.
  */
@@ -420,10 +421,10 @@ static volatile UW dwt_dt_cnt;			/* reset each HB print  */
  * regardless, so this function cannot violate R-3 even if these constants are
  * later edited. That is the point of enforcing the floor in the driver.
  *
- * STILL TRUE ON THE BENCH: the synthetic generator emits a CONSTANT 50 cm/s
- * (SYN_STEP_MM 10 per 20 ms frame), so this returns a constant 280 ms until
- * real ToF frames arrive in Block 4. Graded urgency is NOT demonstrable on
- * synthetic data — a uniform buzz rate is not a fault.
+ * On the Phase 4 bench the synthetic generator emitted a CONSTANT 50 cm/s
+ * (SYN_STEP_MM 10 per 20 ms frame), so this returned a constant 280 ms.
+ * Graded urgency shows only with real ToF frames, as in the shipped build;
+ * a uniform buzz rate on synthetic data is not a fault.
  */
 #define HAZ_URG_BASE_MS		400	/* interval at the hazard threshold */
 #define HAZ_URG_SLOPE		4	/* ms shorter per extra cm/s        */
@@ -478,7 +479,7 @@ static void hazard_task_fct(INT stacd, void *exinf)
 		 * the Phase 4 hazard LEVEL placeholder).
 		 * Priority-1 task touches GPIO ONLY (CLAUDE.md §2); all
 		 * DRV2605L I2C configuration happens at init from TK_PRI 3.
-		 * TRIG is not wired to the breakout yet — T3 step 3. */
+		 * PE13 is wired to the breakout's IN/TRIG pin (T3, closed). */
 		if (r.hazard) {
 			(void)drv2605l_trig_fire(
 				hazard_urgency_interval_ms(r.v_close_cm_s));
