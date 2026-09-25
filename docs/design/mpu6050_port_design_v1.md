@@ -1,6 +1,6 @@
 # PHASE5_L2 — MPU6050 IMU Port Design (v1)
 
-Haptic-Sense · TRON Forum Contest 2026 · Review pass 2026-07-09 (chat/Opus)
+Haptic-Sense · TRON Forum Contest 2026 · Review pass 2026-07-09
 
 **Review inputs (this pass):** `app_i2c.c` (uploaded, verified byte-identical role to prior pass), **RM-MPU-6000A-00 rev 4.0** (Register Map, 2012-03-09) — cited `{RM §x.y}`, **PS-MPU-6000A-00 rev 3.4** (Product Specification, 2013-08-19) — cited `{PS §x.y}`. All hardware claims below trace to these two uploads unless tagged `[UNVERIFIED → V-n]` (ledger in §8).
 **NOT available:** `app_i2c.h` / `i2c_timing.h` (same gaps as VL53L1X pass), GY-521 breakout schematic (no official one exists — board-level facts are hardware-gated by design).

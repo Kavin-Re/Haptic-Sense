@@ -1,6 +1,6 @@
 # CROSS-CUTTING RED-ZONE AUDIT — VL53L1X / MPU6050 / DRV2605L + Task Architecture
 
-Project: Haptic-Sense (TRON Forum Contest 2026) · Audit pass 2026-07-11 (chat/Fable)
+Project: Haptic-Sense (TRON Forum Contest 2026) · Audit pass 2026-07-11
 Type: adversarial review. Verdicts: **PASS** / **VIOLATION** / **VIOLATION RISK** / **UNVERIFIED**.
 Locked decisions honored, not re-litigated: MPU6050 DLPF_CFG=4, ±4 g; DRV2605L open-loop baseline.
 

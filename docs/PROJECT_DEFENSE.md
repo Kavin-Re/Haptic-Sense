@@ -11,17 +11,17 @@ two independent deadlines, neither of them 25 Sep.** Clock is 800 MHz, hardware-
 
 **What this document is.** Insurance, not design. Three drivers are designed and audited
 (VL53L1X, MPU6050, DRV2605L), the four-task RTOS architecture is hardware-proven, and the
-adversarial-review capacity that caught this project's worst latent bugs (Fable-class
-review) will not be available through implementation and integration. This document is
-the transfer artifact: it assumes the reader — Kavin in two months, or a less-capable
-model with zero session memory — knows nothing about how these findings were made.
+wide, multi-file adversarial audit passes that caught this project's worst latent bugs
+(`docs/audits/`) will not be repeated at that depth through implementation and integration.
+This document is the transfer artifact: it assumes the reader — Kavin in two months, or any
+reviewer starting cold — knows nothing about how these findings were made.
 
 **How to use it.**
 - §1–§3 are reference: look things up when something behaves strangely (§1), before
   starting Phase 6 work (§2), and whenever asking "what's still open?" (§3 is the single
   source of truth for September).
 - §4–§7 are habits and gates: §4 before changing any configuration, §5 as standing
-  discipline, §6 every single flash, §7 for how to work without Fable.
+  discipline, §6 every single flash, §7 for how to keep adversarial review going at narrower scope.
 - Appendix A lists source-file discrepancies found while writing this. **None of them
   have been applied** — each needs Kavin's separate approval.
 
@@ -648,19 +648,19 @@ dead board before re-running this list.
 
 ---
 
-## 7. POST-FABLE WORKFLOW
+## 7. REVIEW WORKFLOW AFTER THE AUDIT PASSES
 
 **The tool split (unchanged in shape, degraded in depth):**
 
 | Tool | Owns | Never does |
 |---|---|---|
-| Chat (Opus) | Architecture, design docs, **adversarial review passes**, datasheet analysis | On-disk edits, commits |
+| Design/review sessions | Architecture, design docs, **adversarial review passes**, datasheet analysis | On-disk edits, commits |
 | Claude Code | On-disk implementation, greps/file-verification, commits, evidence collection | Unreviewed design decisions |
 | Bench | Everything §3.2 marks `hardware`; all H-D/first-light items | — |
 
-**Approximating the lost adversarial capacity on Opus.** Fable-class review found F-1,
-F-4, and M-1 in wide multi-file passes. Opus can reach similar findings with the same
-*method* at tighter scope:
+**Keeping adversarial review going at narrower scope.** The wide multi-file audit passes
+(`docs/audits/`) found F-1, F-4, and M-1. Later review passes can reach similar findings with
+the same *method* at tighter scope:
 
 1. **Scope one slice per pass** — one driver × one audit item class (task boundary /
    blocking / cache / semaphores / contamination), not six items × three drivers.

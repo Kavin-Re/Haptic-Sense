@@ -1,6 +1,6 @@
 # AUDIT ADDENDUM — MPU6050 SLICE (closes A-1)
 
-Project: Haptic-Sense · Addendum to `redzone_audit_crosscutting_2026-07-11.md` · Pass 2026-07-11 (chat/Fable)
+Project: Haptic-Sense · Addendum to `redzone_audit_crosscutting_2026-07-11.md` · Pass 2026-07-11
 Scope per instruction: **items 1, 2, 4, 5 only**, MPU6050 driver design. Original findings F-1…F-9, U-1 stand unchanged; VL53L1X and DRV2605L are not re-audited here (note: they did not pass clean — F-1 and F-4 remain open high-severity items in the base report).
 
 > **Snapshot of 2026-07-11.** Findings below (including M-1/M-2/M-3, and the base
