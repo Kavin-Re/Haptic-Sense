@@ -30,6 +30,8 @@ and is not redistributed here. The firmware does not need it: the generated arti
 raw features with no DSP block, class weight 3.35, 50 epochs. Held-out result at p = 0.20:
 recall 81.3 %, precision 64.1 %, F1 0.717.
 
+The as-shipped firmware evaluates at a different, lower threshold (`HAZ_PROB_THRESH_Q = -51` in `app_hazard_classifier.h`, roughly p >= 0.30 -- see "Known inconsistency" below for why). At that threshold, on the same 3,721 held-out rows: recall 73.5 %, precision 69.5 %, false-alarm rate 9.7 % (tp 630 / fp 277 / fn 227 / tn 2587). This is the number the work description and the slide deck call "the shipped model"; the p = 0.20 result above is what v4's own validated threshold would give if the header pointed at it.
+
 ## Later experiments (not in the firmware's weights)
 
 Models v5–v10 were trained on 2026-09-18/19 with added off-axis and near-field data, part

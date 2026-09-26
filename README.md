@@ -188,7 +188,7 @@ Pipeline: hardware data collection → Edge Impulse (feature engineering + train
   ToF ambient rate and signal rate. Features are computed on the device and uploaded to Edge
   Impulse as raw features, so the firmware is the only definition of the feature space.
 - **Predictive label:** each training frame is labeled with the rule distance < 80 cm **and**
-  closing velocity > 20 cm/s evaluated **12 frames (~336 ms) later**, so the model learns
+  closing velocity > 20 cm/s evaluated **12 frames (~0.44 s) later**, so the model learns
   "about to be a hazard", not "already is".
 - A small fully-connected network (17→32→16→1, sigmoid output), INT8, using only NPU-safe
   operators — no recurrent or attention layers, which fall back to the CPU silently and 10-30×

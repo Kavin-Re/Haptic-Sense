@@ -52,7 +52,10 @@ boost_angle_labeled.csv
 # (NOT a bare "*.log") so it can never shadow the real evidence .log files
 # tracked under docs/evidence/phase4/ and docs/evidence/phase5/.
 /*.log
-/logs/
+/logs/*
+# exception: this one real sensor log is the source data cited by the slide deck's
+# hazard-detection diagram (slide 10) and the demo video -- keep it public so the citation resolves
+!/logs/csv_hand_straight_normal_195036.log
 
 # Edge Impulse / TFLite export scratch directories (intermediate model
 # export dumps, not the canonical model/ directory)
@@ -77,3 +80,14 @@ network_atonbuf.xSPI2.raw.forverify
 docs/CONTEST_LOGISTICS.md
 docs/PACK_SHIP_SUBMIT_CHECKLIST_20260915.md
 docs/FINAL_STRETCH_RUNBOOK_20260919.md
+
+# demo-video build outputs (large media; keep render.py + notes tracked)
+video_build/*.mp4
+video_build/parts/
+video_build/parts2/
+video_build/parts3/
+video_build/parts4/
+video_build/review/
+
+# private planning doc, same category as CONTEST_LOGISTICS.md etc above
+docs/OPUS_VIDEO_CREATIVE_BRIEF_20260926.md
