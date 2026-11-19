@@ -1,0 +1,355 @@
+
+<style>
+.wrap { padding: 1rem 0; }
+.legend { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.25rem; }
+.leg { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--color-text-secondary); }
+.badge { font-size:10px; font-weight:500; padding:2px 8px; border-radius:999px; white-space:nowrap; flex-shrink:0; }
+.bc { background:#FCEBEB; color:#791F1F; }
+.bh { background:#FAEEDA; color:#633806; }
+.bm { background:#E6F1FB; color:#0C447C; }
+.br { background:#EAF3DE; color:#27500A; }
+@media(prefers-color-scheme:dark){
+  .bc{background:#501313;color:#F7C1C1;}
+  .bh{background:#412402;color:#FAC775;}
+  .bm{background:#042C53;color:#B5D4F4;}
+  .br{background:#173404;color:#C0DD97;}
+}
+.sec { font-size:11px; font-weight:500; letter-spacing:.07em; text-transform:uppercase; color:var(--color-text-tertiary); margin:2rem 0 .6rem; padding-bottom:.35rem; border-bottom:1px solid var(--color-border-tertiary); }
+.sec:first-of-type { margin-top:.5rem; }
+.card { border-radius:var(--border-radius-lg); border:1px solid var(--color-border-tertiary); margin-bottom:.6rem; overflow:hidden; }
+.card-head { display:flex; align-items:flex-start; gap:.7rem; padding:.8rem 1rem; cursor:pointer; user-select:none; }
+.card-head:hover { background:var(--color-background-secondary); }
+.card-title { font-size:14px; font-weight:500; color:var(--color-text-primary); line-height:1.4; flex:1; }
+.chev { color:var(--color-text-tertiary); flex-shrink:0; margin-top:1px; transition:transform .18s; }
+.card.open .chev { transform:rotate(180deg); }
+.card-body { display:none; padding:0 1rem .9rem; }
+.card.open .card-body { display:block; }
+.prob { font-size:13px; color:var(--color-text-secondary); line-height:1.65; margin-bottom:.7rem; }
+.fix-lbl { font-size:10px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; color:var(--color-text-tertiary); margin:.6rem 0 .25rem; }
+.fix { font-size:13px; color:var(--color-text-primary); line-height:1.65; padding:.55rem .75rem; border-radius:var(--border-radius-md); border-left:2px solid var(--color-border-secondary); background:var(--color-background-secondary); margin-bottom:.5rem; }
+.res { font-size:13px; color:var(--color-text-primary); line-height:1.65; padding:.55rem .75rem; border-radius:var(--border-radius-md); border-left:2px solid #3B6D11; background:var(--color-background-secondary); }
+.res-lbl { font-size:10px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; color:#3B6D11; margin:.6rem 0 .25rem; }
+@media(prefers-color-scheme:dark){ .res-lbl{color:#C0DD97;} .res{border-left-color:#27500A;} }
+</style>
+<div class="wrap">
+<div class="legend">
+  <div class="leg"><span class="badge bc">Critical</span> Project-ending if unaddressed</div>
+  <div class="leg"><span class="badge bh">High</span> Severe schedule or quality risk</div>
+  <div class="leg"><span class="badge bm">Medium</span> Manageable with planning</div>
+  <div class="leg"><span class="badge br">Resolved</span> Reference repo directly covers this</div>
+</div>
+
+<div class="sec">RTOS & kernel</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge br">Resolved</span>
+    <span class="card-title">Zero µT-Kernel 3.0 experience — kernel porting from scratch</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">Originally the most dangerous risk. µT-Kernel 3.0 has minimal English documentation, and porting it to a brand-new SoC (STM32N6) without prior RTOS experience could have consumed the entire sprint.</div>
+    <div class="res-lbl">Resource: reference repo</div>
+    <div class="res">The cloned repo ships a complete, working <code>mtk3_bsp2/</code> folder — the full µT-Kernel 3.0 BSP2 already ported and verified on the STM32N6570-DK. Extract this entire directory wholesale into your project. Do not attempt a fresh port. Study <code>app.c</code> lines 1040–1132 (task creation) and 280–330 (buffer queue / semaphore pattern). That is your RTOS API textbook for this SoC.</div>
+    <div class="fix-lbl">Remaining action</div>
+    <div class="fix">Before Week 6, read through the µT-Kernel 3.0 BSP2 config files in <code>mtk3_bsp2/config/</code>: <code>config_device.h</code>, <code>config_bsp.h</code>, <code>config_tm.h</code>. Understand what the stack sizes and priority ranges are. Change nothing until you have a working boot.</div>
+  </div>
+</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge br">Resolved</span>
+    <span class="card-title">µT-Kernel on Cortex-M55 — no community support or English documentation</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">µT-Kernel 3.0 is primarily documented in Japanese. The STM32N6 is a 2024 SoC. Zero Stack Overflow answers exist for this combination. Getting stuck mid-debug with no external resources is a project-stalling scenario.</div>
+    <div class="res-lbl">Resource: reference repo</div>
+    <div class="res">The reference repo IS your community support. It has: a working linker script (<code>STM32N657X0HXQ_LRUN.ld</code>) for XSPI RAM execution, working NVIC priority group config in <code>main.c</code>, working FSBL integration, and a structured serial debug protocol (<code>tm_printf</code>). For issues not covered here, DM the author (Supun Gamlath) on GitHub directly — this is not a cold outreach, it is a fellow TRON contest participant who shipped the same stack.</div>
+  </div>
+</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bc">Critical</span>
+    <span class="card-title">STM32N6 mandatory FSBL (Secure Boot) — completely absent from your plan</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">The STM32N6 is NOT like an STM32F4. It has ARM TrustZone and a mandatory First Stage Boot Loader (FSBL). You flash three separate binaries in a strict sequence: <code>ai_fsbl.hex</code> first, then model weights, then your signed application at address <code>0x70100000</code>. Your application runs from external XSPI RAM, not internal flash. Your current plan and ROADMAP have zero mention of this. A developer unfamiliar with this will spend 3–5 days on first boot alone thinking the hardware is faulty.</div>
+    <div class="res-lbl">Resource: reference repo</div>
+    <div class="res">The exact flashing procedure is documented in the repo's README under "Flash Signed Binaries." The <code>Binaries/</code> folder contains the pre-built <code>ai_fsbl.hex</code>. The post-build signing step using <code>STM32_SigningTool_CLI</code> (from STM32CubeProgrammer/bin) is documented. BOOT0/BOOT1 pin states for Dev Boot mode vs Flash Boot mode are specified. Follow this procedure exactly for your first bringup. Copy their FSBL hex — your application FSBL requirements are identical.</div>
+    <div class="fix-lbl">Remaining action</div>
+    <div class="fix">Add a dedicated "FSBL bringup + first boot" sub-task to Week 6 with a 3-day time-box. Do not start writing sensor code until you have a blinking LED running via µT-Kernel on the N6. That milestone validates: FSBL works, XSPI RAM is initialized, kernel boots, and your signing pipeline is configured. Everything downstream depends on this.</div>
+  </div>
+</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bc">Critical</span>
+    <span class="card-title">&lt; 1 ms preemption is a hard real-time constraint, not a milestone to verify in Week 10</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">The plan treats < 1 ms preemption as something to "certify" in Week 10 via hardware timers. But preemption latency is baked into the architecture from Day 1 — it is a consequence of ISR entry overhead + context switch time + GPIO write, all of which are fixed by your task structure and clock config. If any driver (especially the I2C blocking transaction) or any ISR mask inadvertently disables preemption, the budget is silently violated and you won't know until Week 10 — with no time to fix it. On Cortex-M55 at 600 MHz, 1 ms = 600,000 cycles. That sounds like a lot until you realize a blocking I2C transaction for VL53L1X ranging takes 20 ms.</div>
+    <div class="res-lbl">Resource: reference repo</div>
+    <div class="res">The reference repo uses a semaphore-signaled ISR pattern (<code>isp_sem</code>) where the high-priority ISR simply signals a semaphore rather than doing any work inline. The actual processing happens in the high-priority task that wakes from that signal. Copy this pattern: your "Hazard Alert" Priority 1 task waits on a semaphore; the inference task signals it when a collision vector is predicted. The ISR itself is sub-microsecond.</div>
+    <div class="fix-lbl">Remaining action</div>
+    <div class="fix">Instrument with DWT cycle counter from first boot. Toggle a debug GPIO at ISR entry and at haptic GPIO set. Measure this with a logic analyzer or oscilloscope on Day 1 of sensor integration, not Week 10. Never make a blocking HAL call inside a high-priority task or ISR. All I2C transactions must live exclusively in the Priority 3 Sensor Acquisition Task.</div>
+  </div>
+</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bc">Critical</span>
+    <span class="card-title">Shared inference result buffer between Priority 1 and Priority 2 tasks — race condition</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">The Priority 2 TinyML Inference Task writes a collision prediction result. The Priority 1 Hazard Alert Task reads it. If Priority 1 preempts Priority 2 mid-write, the read gets a half-updated, corrupted value. This is a classic RTOS race condition. In safety-critical systems, a corrupted false-negative (missed hazard) or false-positive (phantom alert) both cause failures. This bug is silent under normal operation and only manifests intermittently under timing stress — exactly the scenario of Week 14 outdoor field testing.</div>
+    <div class="res-lbl">Resource: reference repo</div>
+    <div class="res">The reference repo solves this with a buffer queue pattern using paired semaphores (<code>bq->free</code> and <code>bq->ready</code>) that enforce producer-consumer ordering with zero shared-memory race conditions. The producer (inference thread) only writes to a buffer when <code>bq->free</code> is available. The consumer (display/postprocess thread) only reads when <code>bq->ready</code> is signaled. Adapt this exact pattern for your inference result: inference task writes to a result slot and signals a semaphore; hazard task consumes only after the signal. The code is in <code>app.c</code> lines 280–330.</div>
+  </div>
+</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bh">High</span>
+    <span class="card-title">VL53L1X + MPU6050 on shared I2C bus — blocking transactions will break the scheduler</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">VL53L1X ranging takes 20–100 ms per measurement in blocking mode. MPU6050 read is fast (~1 ms) but still blocks. If either I2C transaction runs inside a high-priority task (or worse, an ISR), it stalls the scheduler and destroys your real-time budget. Additionally, both devices share PB6/PB7 — bus arbitration must be managed, and pull-up resistors must be correct for 400 kHz fast mode (4.7 kΩ to 3.3V). Neither is mentioned in the plan.</div>
+    <div class="res-lbl">Resource: reference repo</div>
+    <div class="res">The reference repo uses DMA-based camera transfers and a dedicated ISP thread (Priority 10, highest) that handles all hardware I/O independently. Adapt this: put all I2C transactions in a dedicated Priority 3 Sensor Acquisition Task that runs on a hardware timer tick. Never call HAL_I2C_Master_Transmit with blocking timeout from any other task context.</div>
+    <div class="fix-lbl">Remaining action — hardware</div>
+    <div class="fix">Verify: 4.7 kΩ pull-ups to 3.3V on both SDA and SCL. VL53L1X XSHUT pin must be driven high to enable the sensor — if left floating the device is off and I2C returns NAK. Set VL53L1X timing budget to 20 ms minimum (API call: <code>VL53L1X_SetTimingBudgetInMs(20)</code>). Configure I2C in DMA mode, not polling. Confirm no address collision: VL53L1X = 0x29 (7-bit), MPU6050 = 0x68 or 0x69 depending on AD0 pin.</div>
+  </div>
+</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bm">Medium</span>
+    <span class="card-title">SLEEP vs STOP mode — deep sleep conflicts with sub-ms interrupt wake requirement</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">The plan claims "deep sleep between polling intervals." On STM32N6, Stop mode wake-up requires HSE/HSI oscillator restart (5–50 µs). If an interrupt (collision ISR) fires during that restart window, response latency spikes unpredictably. For a < 1 ms preemption guarantee, Stop mode is incompatible with the safety-critical path.</div>
+    <div class="fix-lbl">Fix</div>
+    <div class="fix">Use WFI (Wait For Interrupt) SLEEP mode for the idle task — zero wake latency, modest power saving. Reserve Stop/Standby for an explicit "system off" state triggered by a long idle timeout (e.g. > 30 seconds with no detected motion from MPU6050). Measure actual idle current in WFI sleep mode first before claiming battery life specs.</div>
+  </div>
+</div>
+
+<div class="sec">AI / TinyML</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bc">Critical</span>
+    <span class="card-title">No AI training experience — "TinyML model" is undefined in scope, architecture, and data</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">The plan allocates 2 weeks for data capture AND model deployment with zero prior ML experience. Training a custom trajectory prediction model requires: formally defining the problem as a learning task, designing the feature vector, labeling data, choosing a model architecture, training (needs a GPU or cloud compute), quantizing to INT8, converting to TFLM flatbuffer, generating <code>network.c</code> via ST's X-CUBE-AI tool, and verifying operator compatibility with the NeuralART runtime. 2 weeks is inadequate even for an experienced ML engineer. The plan has no definition of what "hazard" means as a machine learning label.</div>
+    <div class="res-lbl">Resource: reference repo</div>
+    <div class="res">The reference repo uses Edge-impulse-style pre-optimized models (YOLO-X Nano, INT8) and shows the exact model deployment chain: <code>.tflite</code> → <code>generate-n6-model.sh</code> → <code>network.c</code> + <code>network_data.hex</code> → flash. The NeuralART runtime in <code>Lib/AI_Runtime/</code> (70 MB) and the <code>user_neuralart.json</code> optimizer flags are directly reusable for your model, not just theirs.</div>
+    <div class="fix-lbl">Recommended scope reduction</div>
+    <div class="fix">Do not train from scratch. Use Edge Impulse (free, browser-based). Define your ML problem now: Input = 8-feature sliding window [d(t), d(t-1), d(t-2), Δd/Δt (velocity), Δ²d/Δt² (accel), ax, ay, az]. Output = binary: hazard / safe. Collect ~500 samples per class by walking toward and away from a wall. Edge Impulse handles training, quantization, and TFLM export. Then run the exported <code>.tflite</code> through ST's X-CUBE-AI (STM32CubeMX plugin) to generate <code>network.c</code> for the NeuralART runtime. This path is achievable in 2 weeks.</div>
+  </div>
+</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bc">Critical</span>
+    <span class="card-title">"Neural-ART Accelerator" is not a standard term — Ethos-U55 NPU integration has specific constraints</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">The STM32N6 NPU is accessed via ST's NeuralART runtime (LL_ATON), not raw TFLite Micro. If a single operator in your model is unsupported by the NPU (e.g. LSTM, GRU, certain reshape ops), the entire model falls back to CPU execution silently — you get no error, just 10× slower inference and a destroyed latency claim. The plan uses "Neural-ART Accelerator" as if it's transparent middleware. It is not.</div>
+    <div class="res-lbl">Resource: reference repo</div>
+    <div class="res">The reference repo shows exactly how this works: <code>user_neuralart.json</code> contains the NeuralART compiler flags including <code>--mvei</code> (M-Profile Vector Extension for Cortex-M55), <code>--enable-epoch-controller</code>, <code>--Oalt-sched</code>, and <code>--Ocache-opt</code>. The <code>LL_ATON_PLATFORM=LL_ATON_PLAT_STM32N6</code> compile define enables NPU routing. The entire <code>Lib/AI_Runtime/</code> folder is the runtime you must link against. Copy it. The <code>generate-n6-model.sh</code> script is the tool that compiles your model into <code>network.c</code>.</div>
+    <div class="fix-lbl">Remaining action</div>
+    <div class="fix">Constrain your model architecture to NPU-supported operators only: Conv1D (mapped from Conv2D with h=1), DepthwiseConv, FullyConnected, ReLU, Sigmoid. No LSTM. No attention. A simple 3-layer FC or 1D-CNN on an 8-feature window is sufficient for binary collision classification and will run fully on the NPU. Run CPU inference first, validate correctness, then enable NPU offload and confirm latency improvement.</div>
+  </div>
+</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bh">High</span>
+    <span class="card-title">Data collection is undefined — 2 weeks of random sensor logging has no path to a model</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">Week 7 says "collect spatial trajectory data via VL53L1X." There is no specification of: what constitutes a hazard label, what the feature vector is, what the sampling rate is, how many samples are needed, or how labels are assigned to raw sensor streams. Without this defined before data collection starts, Week 7 produces an unlabeled, unusable dataset.</div>
+    <div class="fix-lbl">Fix — define this now, during exam freeze</div>
+    <div class="fix">Formalize the dataset specification on paper today. Label = 1 (hazard) when: distance &lt; 80 cm AND closing velocity &gt; 20 cm/s. Label = 0 (safe) otherwise. Sampling rate = 50 Hz (20 ms VL53L1X timing budget). Feature window = 10 samples (200 ms history). Capture sessions: "walk toward wall" (hazard), "walk parallel to wall" (safe), "stationary near wall" (safe), "object approaching user" (hazard). Use UART-to-CSV logging (copy the JSON serial protocol from the reference repo) to capture to a laptop. Label in Edge Impulse's web UI.</div>
+  </div>
+</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bh">High</span>
+    <span class="card-title">15–20 ms TinyML inference time vs &lt; 1 ms preemption — architectural tension</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">The application doc states inference takes 15–20 ms. The reference repo measured ~32 ms for YOLO-X Nano on the NPU. Your model is simpler (8-feature FC network vs 480×480 image), so inference will be &lt; 1 ms — but this needs to be verified, not assumed. If it's longer than expected, the Priority 2 inference task occupies the CPU for extended periods, increasing worst-case Priority 1 preemption latency.</div>
+    <div class="res-lbl">Resource: reference repo</div>
+    <div class="res">The reference repo measures inference time via <code>tk_get_otm()</code> (µT-Kernel system time) and outputs it in the UART JSON protocol as <code>inference_ms</code>. Copy this timing instrumentation verbatim into your inference task from Day 1. You will get real measured numbers, not estimates.</div>
+    <div class="fix-lbl">Remaining action</div>
+    <div class="fix">For an 8-feature, 3-layer FC network on the NPU, realistic inference time is &lt; 1 ms. Measure it. If it exceeds 5 ms on CPU fallback, check operator compatibility. The < 1 ms preemption guarantee is upheld by RTOS task preemption, not by the inference completing fast — Priority 1 will preempt Priority 2 mid-inference if needed. The buffer queue semaphore pattern (from the reference repo) ensures the result is only consumed after a full inference completes.</div>
+  </div>
+</div>
+
+<div class="sec">Schedule & planning</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bc">Critical</span>
+    <span class="card-title">11-week solo sprint with zero schedule contingency — one hardware debug week collapses everything</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">Week 6 to Week 16 covers kernel bringup, I2C drivers, sensor fusion, ML training, NPU deployment, haptic actuation, wearable enclosure, and field testing — solo, with no hardware contingency. Week 6 gives 10 days for FSBL + µT-Kernel boot (experts estimate 2–3 weeks for a new SoC). A single I2C bug (common) can take 3 days to isolate. There is no buffer. The wearable enclosure (Week 11) is a full mechanical assembly task stacked on top of unfinished firmware.</div>
+    <div class="res-lbl">Resource: reference repo (partial)</div>
+    <div class="res">The reference repo eliminates the kernel bringup risk entirely. Copying <code>mtk3_bsp2/</code> and the FSBL procedure compresses Week 6 from a 2-week unknown to a 2–3 day setup. This gives you approximately 1 week of recovered schedule margin.</div>
+    <div class="fix-lbl">Scope reduction required</div>
+    <div class="fix">Drop the physical wearable enclosure from the contest submission. Present a benchtop prototype on the DK board. A working benchtop demo with measured &lt; 1 ms preemption and live haptic feedback is more impressive to engineering judges than a poorly-assembled wearable with firmware bugs. Add a note in documentation: "Enclosure design is a Phase 2 deliverable." Add 1-week contingency buffers after Week 8 and after Week 12 by eliminating "Hardware Enclosure Assembly" from the critical path.</div>
+  </div>
+</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bh">High</span>
+    <span class="card-title">STM32F401RE PoC officially scrapped — no fallback if STM32N6570-DK fails</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">The ROADMAP explicitly deprecates the F401RE. If the N6570-DK sustains a hardware fault mid-sprint (static discharge, peripheral failure, accidental over-voltage), replacement lead time from ST is weeks. The N6570-DK is an expensive eval board, not a disposable Nucleo.</div>
+    <div class="fix-lbl">Fix</div>
+    <div class="fix">Un-scrap the STM32F401RE. Use it as the sensor driver development platform. Write and validate all I2C drivers, VL53L1X/MPU6050 code, and haptic PWM logic on the F401RE with FreeRTOS first — it's a known working platform with massive community support. Port to the N6 only after sensor logic is verified. If the N6 fails, your sensor stack still works on the F401RE and you have a functional (if reduced) demo. This is not a step backward; it is parallel development that reduces critical-path risk.</div>
+  </div>
+</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bh">High</span>
+    <span class="card-title">Solo development — HITL verification pipeline is self-referential</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">APPROACH.md states "I am the sole validator." Validating RTOS code you've never written, against hardware you've never booted, without a second set of eyes, means bugs that an experienced reviewer would catch in 5 minutes can cost days. The "conflict resolution logs" document failures — but only if there's a resolution path. Some RTOS bugs (priority inversion, stack overflow) require familiarity to even recognize.</div>
+    <div class="res-lbl">Resource: reference repo author</div>
+    <div class="res">Supun Gamlath (the reference repo author) shipped this exact stack 12 months ago. A GitHub issue or direct DM with a specific, well-formed technical question (not "help me with my project") has a realistic chance of getting a response. Frame it as: "I'm also entering TRON 2026 on the STM32N6570-DK with µT-Kernel 3.0. I noticed you used X pattern for buffer queues — did you encounter [specific issue]?" Specificity is the difference between a reply and silence.</div>
+    <div class="fix-lbl">Additional action</div>
+    <div class="fix">Identify one faculty member or senior student (3rd/4th year, embedded systems background) willing to review code at three gates: first kernel boot, first sensor read, first inference result. Even 2 hours of external review at each gate catches bugs that days of solo staring miss.</div>
+  </div>
+</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bm">Medium</span>
+    <span class="card-title">Exam ends June 3, development starts June 4 — zero transition buffer</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">Last exam is Verilog HDL on June 3. Full-time integration starts June 4. Post-exam cognitive fatigue is real and measurable. Starting complex hardware bringup (FSBL + µT-Kernel boot) the day after a Verilog exam increases the probability of setup mistakes that are hard to diagnose later — wrong build configuration, wrong signing tool path, wrong boot mode pin state.</div>
+    <div class="fix-lbl">Fix</div>
+    <div class="fix">Take June 4–5 as a planning-only sprint: create the STM32CubeIDE project structure by copying from the reference repo, verify the signing tool path, confirm BOOT0/BOOT1 pin access on your board, and make a checklist of the FSBL flashing steps. Write no new firmware. First actual code starts June 6. You lose 2 days but start Week 6 with clarity rather than in a post-exam haze.</div>
+  </div>
+</div>
+
+<div class="sec">Hardware & power</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bc">Critical</span>
+    <span class="card-title">ERM motors driven directly from STM32 GPIO — will permanently damage the SoC</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">The hardware diagram shows "PWM Signal (PA0)" going directly to ERM haptic motors. STM32N6 GPIO maximum source current is 25 mA per pin. ERM vibration motors draw 60–150 mA at 3V. Driving an ERM directly from GPIO will either fail to spin (insufficient current) or destroy the GPIO driver permanently (overcurrent). This is not a software issue — it will cause irreversible hardware damage the first time you power it on with a real motor. The reference repo uses no actuators, so it does not model this risk.</div>
+    <div class="fix-lbl">Fix — mandatory before any assembly</div>
+    <div class="fix">Two options. Option A (purpose-built, recommended): DRV2605L haptic driver IC. I2C-controlled, supports ERM and LRA motors, has a built-in waveform library, 1.8–5.5V supply, max 300 mA output. Connects to your existing I2C bus (address 0x5A). GPIO controls only the EN pin. Option B (discrete, simpler): NPN transistor (2N2222 or BC547) per motor. GPIO → 1 kΩ base resistor → transistor base. Motor connects collector to 5V rail (through transistor), emitter to GND. Add 1N4007 flyback diode across the motor (cathode to 5V, anode to collector). Each option costs under ₹50 per motor channel. This fix must happen before Week 11 assembly.</div>
+  </div>
+</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bh">High</span>
+    <span class="card-title">Power budget uncalculated — Li-Po battery sizing is a guess</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">Battery is listed as "Li-Po" with no capacity, voltage, or runtime target. STM32N6 active at 600 MHz draws ~200–400 mA. VL53L1X ranging mode: 19 mA. MPU6050: 3.9 mA. Multiple ERM motors (peak): 60–150 mA each. Total peak: easily 500–700 mA. Without a power budget, a "4-hour wearable" claim is fabricated. The power stress test is in Week 13 — far too late to discover the system runs 20 minutes and requires a complete redesign.</div>
+    <div class="fix-lbl">Fix — calculate now</div>
+    <div class="fix">Power budget (rough): STM32N6 average (with NPU, periodic sleep) ~150 mA. VL53L1X continuous ranging: 19 mA. MPU6050: 4 mA. 2× ERM motors average duty (20% on-time): ~30 mA. Regulator overhead (3.3V LDO ~85% efficiency): +15%. Total average: ~235 mA. For 4-hour runtime: 235 mA × 4 h / 0.8 (Li-Po usable capacity) = 1,175 mAh minimum cell. Order a 1,500 mAh 3.7V Li-Po with a 3.3V regulator. Note: the STM32N6570-DK eval board is not power-optimized for wearable use — the final wearable power circuit is a separate hardware design task.</div>
+  </div>
+</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bm">Medium</span>
+    <span class="card-title">Application executes from XSPI RAM — cache maintenance is mandatory for NPU correctness</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">The STM32N6 runs your application from XSPI external RAM. The Cortex-M55 has L1 I/D-Cache. When the NPU DMA reads model weights or writes inference outputs, it bypasses the CPU cache — meaning the CPU may read stale cached values from a region the NPU has already updated. This produces incorrect inference results with no error flag. The NeuralART compiler flag <code>--cache-maintenance</code> (visible in the reference repo's <code>user_neuralart.json</code>) enables automatic cache invalidation, but only for NPU-managed buffers. Your sensor input buffer (filled by I2C DMA) also needs explicit cache invalidation before the NPU reads it.</div>
+    <div class="res-lbl">Resource: reference repo</div>
+    <div class="res">The reference repo's <code>user_neuralart.json</code> already includes <code>--cache-maintenance</code>. Copy this config flag exactly. For your I2C sensor buffer: call <code>SCB_InvalidateDCache_by_Addr()</code> on the sensor input buffer after DMA completion and before triggering NPU inference. The reference repo's camera DMA pipeline does this for frame buffers — same pattern applies to your sensor data buffer.</div>
+  </div>
+</div>
+
+<div class="sec">Contest & documentation</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bm">Medium</span>
+    <span class="card-title">"Zero-latency" is a physically impossible claim — engineering judges will flag this</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">The application PDF uses "zero-latency" and "zero-latency execution" multiple times. No physical system has zero latency. TRON contest judges are embedded systems engineers — they will read "zero-latency" as either a misunderstanding of the terminology or an unsubstantiated marketing claim. Either reading damages credibility.</div>
+    <div class="res-lbl">Resource: reference repo</div>
+    <div class="res">The reference repo measures and reports exact timing: <code>inference_ms</code>, <code>pp_ms</code>, <code>display_ms</code>, <code>period_ms</code>, <code>fps</code> — all via <code>tk_get_otm()</code>. Use this same instrumentation to produce a real measured number for your preemption latency. "Measured 280 µs worst-case preemption latency (DWT cycle counter, 1000-sample distribution)" is a far stronger claim than "zero-latency."</div>
+    <div class="fix-lbl">Fix</div>
+    <div class="fix">Replace every instance of "zero-latency" with "deterministic sub-millisecond latency (&lt; 1 ms, hardware-verified)." In the Procedure Manual, include the actual DWT measurement histogram. This turns a red flag into a demonstration of engineering rigor.</div>
+  </div>
+</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bm">Medium</span>
+    <span class="card-title">Apache 2.0 in README vs MIT in ROADMAP — license inconsistency in a contest with an audit requirement</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">README.md declares Apache License 2.0. ROADMAP.md Week 19 refers to "MIT licensing." These are substantively different licenses (Apache 2.0 has an explicit patent grant clause; MIT does not). Week 19 includes a "repository audit" — the first thing an auditor checks is license consistency. A mismatch is a trivially avoidable administrative failure.</div>
+    <div class="res-lbl">Resource: reference repo</div>
+    <div class="res">The reference repo uses MIT License consistently. µT-Kernel 3.0 is licensed under T-License 2.2 (TRON Forum's open-source license) — check whether this is compatible with your chosen license for the combined work. The reference repo navigates this by keeping the µT-Kernel source under its own license in <code>mtk3_bsp2/</code> and licensing only the application code.</div>
+    <div class="fix-lbl">Fix</div>
+    <div class="fix">Choose one license today. Apache 2.0 is recommended (explicit patent grant is professionally appropriate for a safety device). Update ROADMAP.md, add <code>LICENSE</code> file to repo root, and add a license header to every source file. Do this before Week 6 development starts so you don't have to retrofit it across 3,000 lines of firmware.</div>
+  </div>
+</div>
+
+<div class="card" onclick="toggle(this)">
+  <div class="card-head">
+    <span class="badge bm">Medium</span>
+    <span class="card-title">µT-Kernel 3.0 T-License 2.2 obligations — not mentioned anywhere in your documentation</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </div>
+  <div class="card-body">
+    <div class="prob">µT-Kernel 3.0 is licensed under T-License 2.2 by the TRON Forum. Using it in a TRON contest submission requires attribution and compliance with T-License terms. Your README, APPROACH.md, and ROADMAP.md make no mention of this. The NeuralART runtime in <code>Lib/AI_Runtime/</code> also has its own ST license terms. In a contest explicitly run by the TRON Forum, a license violation in the submission package is disqualifying.</div>
+    <div class="res-lbl">Resource: reference repo</div>
+    <div class="res">The reference repo correctly attributes µT-Kernel 3.0 BSP2 under T-License 2.2 and keeps it structurally separate in <code>Appli/mtk3_bsp2/</code> with its own license notice. Copy this exact directory structure and attribution pattern.</div>
+    <div class="fix-lbl">Fix</div>
+    <div class="fix">Add a LICENSES/ directory or a NOTICE file that explicitly lists: (1) µT-Kernel 3.0 BSP2 — T-License 2.2, TRON Forum, (2) STM32 NeuralART Runtime — ST SLA license, (3) STM32Cube_FW_N6 HAL — ST SLA, (4) Your application code — Apache 2.0. Do this before submitting anything to the contest repo.</div>
+  </div>
+</div>
+
+</div>
+<script>
+function toggle(card) {
+  const open = card.classList.toggle('open');
+  card.querySelector('.card-body').style.display = open ? 'block' : 'none';
+}
+</script>
