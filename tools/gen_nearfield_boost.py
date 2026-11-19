@@ -5,7 +5,8 @@ as the angle boost (residual-from-combo-mean covariance + shrinkage, anchored
 to real rows). Adds to comprehensive_v4 rather than rebuilding from scratch --
 the angle fix and the distance fix are orthogonal and both real.
 """
-import pandas as pd, numpy as np
+import numpy as np
+import pandas as pd
 
 np.random.seed(20260919)
 FEAT_COLS = ["d0","d1","d2","d3","d4","d5","d6","d7","d8","d9",
@@ -110,7 +111,7 @@ print(f"balanced class_weight -> {{0: {n/(2*n0):.3f}, 1: {n/(2*n1):.3f}}}")
 # sanity check correlation preservation in the new near-field synthetic rows
 real_b1 = band1
 synth_b1 = comp_v5[(comp_v5.synth_method=="mvn_nearfield") & (comp_v5.d0_mm>=100) & (comp_v5.d0_mm<200)]
-print(f"\n--- 100-200mm band sanity check ---")
+print("\n--- 100-200mm band sanity check ---")
 print("real   d0~v corr:", round(real_b1['d0'].corr(real_b1['v']),3), " n=", len(real_b1))
 print("synth  d0~v corr:", round(synth_b1['d0'].corr(synth_b1['v']),3), " n=", len(synth_b1))
 

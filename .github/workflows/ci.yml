@@ -1,0 +1,75 @@
+name: CI
+
+# Host-side checks only. The firmware itself needs STM32CubeIDE plus two ST
+# packages that are not redistributed in this repository (see README, "Build
+# & flash"), so it is not built here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-tests:
+    name: Host C unit tests (gcc + ASan/UBSan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run
+        run: make -C tests/host
+      - name: Build and run without sanitizers
+        run: make -C tests/host clean && make -C tests/host SAN=0
+
+  tools:
+    name: Python tools (ruff + unittest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Lint
+        run: |
+          python -m pip install --quiet ruff
+          ruff check .
+      - name: Shell syntax
+        run: bash -n tools/collect_data.sh
+      - name: Unit tests (standard library only)
+        run: python -m unittest discover -s tests/tools -v
+
+  links:
+    name: Markdown links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Relative links between this project's own documents: must always pass.
+      - name: Local links (offline)
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --offline --no-progress
+            './*.md' './docs/**/*.md' './data/**/*.md' './model/**/*.md'
+            './tests/**/*.md' './tools/**/*.md'
+          fail: true
+      # External URLs. st.com rejects automated clients, so it is excluded
+      # rather than allowed to make the job flaky; 403/429 from other hosts
+      # are treated as "reachable, but not for a bot".
+      - name: External links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --no-progress --max-retries 3 --timeout 30
+            --accept 200,206,403,429
+            --exclude '^https://(www|community)\.st\.com/'
+            --exclude '^https://studio\.edgeimpulse\.com/'
+            './*.md' './docs/**/*.md' './data/**/*.md' './model/**/*.md'
+            './tests/**/*.md' './tools/**/*.md'
+          fail: true

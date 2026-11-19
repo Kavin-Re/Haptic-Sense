@@ -37,7 +37,9 @@ Usage:
     python3 analyze_live_capture.py path/to/capture.log
     python3 analyze_live_capture.py path/to/capture.log --logit-thresh 35 --prob-thresh -51
 """
-import argparse, re, sys
+import argparse
+import re
+import sys
 
 LINE_RE = re.compile(
     r"\[NPUDIAG\] seq=(?P<seq>\d+) (?P<status>match|MISMATCH) "

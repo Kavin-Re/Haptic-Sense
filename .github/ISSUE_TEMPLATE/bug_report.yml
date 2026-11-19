@@ -1,0 +1,61 @@
+name: Bug report
+description: Report something that is not working
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps, as exact as possible.
+    validations:
+      required: true
+  - type: input
+    id: board
+    attributes:
+      label: Board and revision
+      description: Exact board, e.g. STM32N6570-DK.
+    validations:
+      required: true
+  - type: input
+    id: toolchain
+    attributes:
+      label: Toolchain / IDE version
+      description: e.g. STM32CubeIDE / STM32CubeN6 toolchain version, arm-none-eabi-gcc version.
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Firmware commit
+      description: Output of `git rev-parse --short HEAD`.
+    validations:
+      required: true
+  - type: textarea
+    id: wiring
+    attributes:
+      label: Wiring and peripherals
+      description: Pin connections, power supply, sensors or modules attached.
+    validations:
+      required: false
+  - type: input
+    id: env
+    attributes:
+      label: Host OS and Python version
+      description: Only if the host-side scripts are involved.
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or output
+      description: Paste relevant output. It will be formatted as code.
+      render: shell
+    validations:
+      required: false

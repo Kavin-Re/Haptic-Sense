@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+title: Haptic-Sense
+type: software
+authors:
+  - given-names: Kavin
+    family-names: K K
+    alias: Kavin-Re
+repository-code: https://github.com/Kavin-Re/Haptic-Sense

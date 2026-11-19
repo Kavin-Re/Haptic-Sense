@@ -33,7 +33,8 @@ COMPREHENSIVE per this request: every angle x label group gets covariance-aware
 synthetic rows (not just off-axis hazard-positive), volumes still weighted
 toward the genuinely thin groups (high-angle hazard, 183 real rows).
 """
-import pandas as pd, numpy as np
+import numpy as np
+import pandas as pd
 
 np.random.seed(20260919)
 FEAT_COLS = ["d0","d1","d2","d3","d4","d5","d6","d7","d8","d9",

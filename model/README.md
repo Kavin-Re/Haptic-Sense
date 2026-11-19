@@ -24,9 +24,9 @@ and is not redistributed here. The firmware does not need it: the generated arti
 
 ## Training pipeline for v4
 
-`collect_data.sh` (serial capture per surface × angle × speed) → `aggregate_training_data.py`
+`tools/collect_data.sh` (serial capture per surface × angle × speed) → `tools/aggregate_training_data.py`
 (FRESH rows only, 37,216 rows from 60 recordings) → 90/10 split into
-`ei_upload_training_20260918.csv` / `held_out_test_vectors_20260918.csv` → Edge Impulse,
+`data/ei_upload_training_20260918.csv` / `data/held_out_test_vectors_20260918.csv` → Edge Impulse,
 raw features with no DSP block, class weight 3.35, 50 epochs. Held-out result at p = 0.20:
 recall 81.3 %, precision 64.1 %, F1 0.717.
 
@@ -36,13 +36,13 @@ The as-shipped firmware evaluates at a different, lower threshold (`HAZ_PROB_THR
 
 Models v5–v10 were trained on 2026-09-18/19 with added off-axis and near-field data, part
 of it synthetic (`docs/SYNTH_DATA_METHODOLOGY.md`; the scripts that made the final
-augmented set are `gen_synth_augment_v4_mvn.py` and `gen_nearfield_boost.py`). None of
+augmented set are `tools/gen_synth_augment_v4_mvn.py` and `tools/gen_nearfield_boost.py`). None of
 them was converted into firmware artifacts in this repository: v5 was byte-identical to v4,
 and v6–v10 are not what the weights above contain.
 
 **Known inconsistency.** The decision thresholds in
 `firmware/Appli/Core/Inc/app_hazard_classifier.h` (`HAZ_PROB_THRESH_Q = -51`,
-`HAZ_LOGIT_THRESH_Q = 35`) were derived from v10 with `eval_v10.py`, while the weights are
+`HAZ_LOGIT_THRESH_Q = 35`) were derived from v10 with `tools/eval_v10.py`, while the weights are
 v4's. The v4-validated NPU threshold is kept in the same header as
 `HAZ_PROB_THRESH_Q_V4_LOCKED (-87)`. Because the firmware ORs the model's decision with the
 rule `d < 800 mm AND v > 20 cm/s` (search "SAFETY-NET FALLBACK" in `app_tasks.c`), hazard

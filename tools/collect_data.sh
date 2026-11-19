@@ -1,10 +1,11 @@
 #!/bin/bash
 # Haptic-Sense Block 6 -- guided data collection script.
-# Run with:  cd ~/haptic-sense && bash collect_data.sh
+# Run with:  bash tools/collect_data.sh        (from anywhere inside the repo)
+# Captures go to <repo>/logs/ ; set LOGDIR=/some/dir to put them elsewhere.
 # Safe to Ctrl-C at any time between prompts; anything already saved stays saved.
 
 set -u
-LOGDIR="$HOME/haptic-sense/logs"
+LOGDIR="${LOGDIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/logs}"
 mkdir -p "$LOGDIR"
 BAUD="115200"
 CAPTURE_SECONDS=45

@@ -1,6 +1,6 @@
 # Synthetic off-axis augmentation — methodology and sources (2026-09-19)
 
-Generated from the real 37,216-row baseline (`training_data_20260918.csv`, 60 real
+Generated from the real 37,216-row baseline (`data/training_data_20260918.csv`, 60 real
 hardware-collected surface x angle x speed combos). No physical re-collection was
 done tonight — all three files below are derived from real captures already on disk.
 
@@ -10,7 +10,7 @@ done tonight — all three files below are derived from real captures already on
 - `training_data_broad_20260919.csv`         — 52,132 rows (14,916 synthetic)
 
 All three tag every row `synthetic` (0/1) and `synth_method`
-(real / jitter / mixup / mixup_crossspeed). `held_out_test_vectors_20260918.csv`
+(real / jitter / mixup / mixup_crossspeed). `data/held_out_test_vectors_20260918.csv`
 was NOT touched and stays 100% real — that must remain the only eval set.
 
 ## What was researched, and what it changed
@@ -73,7 +73,7 @@ was NOT touched and stays 100% real — that must remain the only eval set.
 
 ## 2026-09-19 addendum: unclamped-noise bug found and fixed
 
-`gen_synth_augment_v4_mvn.py` and `gen_nearfield_boost.py` (the
+`tools/gen_synth_augment_v4_mvn.py` and `tools/gen_nearfield_boost.py` (the
 correlation-preserving/mvn method superseding everything above) sampled
 multivariate-normal noise and added it to a real anchor row **without
 clamping to the real, physically-achievable range**. Result: ~24% of `mvn`

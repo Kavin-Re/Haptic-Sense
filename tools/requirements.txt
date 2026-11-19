@@ -1,0 +1,11 @@
+# Python dependencies for the host-side tools in this directory.
+#
+# aggregate_training_data.py and analyze_live_capture.py need only the
+# standard library (Python >= 3.9). The packages below are for the dataset
+# generators and the .tflite scorer.
+#
+# The exact versions used in September 2026 were not recorded, so nothing is
+# pinned and no minimum version is claimed.
+numpy            # gen_synth_augment_v4_mvn.py, gen_nearfield_boost.py, eval_v10.py
+pandas           # same three scripts
+ai-edge-litert   # eval_v10.py only (TFLite interpreter)

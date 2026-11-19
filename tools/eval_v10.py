@@ -7,7 +7,9 @@ repository; see docs/PROVENANCE.md and model/README.md.
 usage: python3 eval_v10.py <model.tflite>
 """
 import sys
-import numpy as np, pandas as pd
+
+import numpy as np
+import pandas as pd
 from ai_edge_litert.interpreter import Interpreter
 
 if len(sys.argv) != 2:

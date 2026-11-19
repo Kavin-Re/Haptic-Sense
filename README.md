@@ -1,5 +1,11 @@
 # Haptic-Sense
 
+[![CI](https://github.com/Kavin-Re/Haptic-Sense/actions/workflows/ci.yml/badge.svg)](https://github.com/Kavin-Re/Haptic-Sense/actions/workflows/ci.yml)
+[![License: Apache-2.0 (original work only)](https://img.shields.io/badge/license-Apache--2.0%20%28original%20work%20only%29-blue.svg)](#license)
+![RTOS: µT-Kernel 3.0](https://img.shields.io/badge/RTOS-%C2%B5T--Kernel%203.0-informational)
+![Board: STM32N6570-DK](https://img.shields.io/badge/board-STM32N6570--DK-03234b)
+![Status: benchtop prototype](https://img.shields.io/badge/status-benchtop%20prototype-yellow)
+
 **An open-source, AI-driven predictive spatial-awareness wearable for visually impaired users.**
 
 TRON Forum Programming Contest 2026 — Entry ID **34476** — RTOS Application category (Students,
@@ -9,22 +15,121 @@ Author: Kavin K K, B.Tech Electronics Engineering (VLSI), Rashtriya Raksha Unive
 
 ---
 
-## What this is
+## Summary
 
-Haptic-Sense is a benchtop prototype (not a finished wearable enclosure) built around a single
-forward-facing time-of-flight sensor, an IMU, and a haptic motor. A small on-device model
-uses distance history, closing velocity, and motion to decide when an obstacle is approaching
-fast enough to be a hazard, backed by a fixed distance/speed rule (see "The on-device model"),
-and drives a haptic pulse whose rate scales with urgency. The whole sensing-to-actuation loop
-runs under a real-time task architecture on **µT-Kernel 3.0**, with hardware-measured
-worst-case preemption latency of **3.375 µs** (logic analyzer, Phase 4) and **4.19 µs**
-(in-firmware cycle counter, 30-minute soak on the full pipeline): both far inside the
-sub-millisecond target the project set for itself. Both figures time the handoff from the
-inference task posting its result to the priority-1 hazard task waking, not sensor-to-motor
-time, which is dominated by the ~37 ms (~27 Hz) sensor frame period.
+A time-of-flight sensor, an IMU and a haptic motor on an STM32N6570-DK, running four tasks
+under **µT-Kernel 3.0**. A small INT8 model on the Neural-ART NPU, ORed with a fixed
+distance/speed rule, decides when an obstacle is closing fast enough to be a hazard; the
+motor then buzzes at a rate that scales with urgency. The handoff from "inference result
+posted" to "priority-1 hazard task running" was measured on hardware at **3.375 µs** worst
+case (logic analyzer) and **4.19 µs** (in-firmware cycle counter, 30-minute soak on the full
+pipeline).
 
-The single-zone ToF sensor cannot measure direction, and this project does not claim it does:
-feedback here is strictly "how urgent," never "which way."
+- It is a **benchtop prototype**, not a finished wearable enclosure.
+- Feedback is strictly "how urgent", never "which way": the single-zone sensor cannot
+  measure direction, and this project does not claim it does.
+
+## Results at a glance
+
+Every number below is a measurement already recorded in this repository; the last column
+says where.
+
+| What | Result | Evidence |
+|---|---|---|
+| Hazard-task preemption latency, worst case — logic analyzer, GPIO pin to pin, 125 ns resolution; synthetic sensor data, extra CPU load | **3.375 µs**, 2,229 events, 0 missed (baseline without load: 1,776 events, same result) | [`docs/evidence/phase4/`](docs/evidence/phase4/) |
+| Same handoff — firmware DWT cycle counter at 800 MHz; real sensors + NPU inference, 30-minute continuous soak | **4.19 µs** (3,349 cycles), 43,723 events | [`docs/evidence/phase6/`](docs/evidence/phase6/README.md) |
+| Torn reads across the paired-semaphore handoff, same soak | **0** in 48,242 frames (`canary_err = 0`) | same |
+| Sensor frame rate, full pipeline | ~27 Hz (~37 ms period) | same |
+| Haptic effect playback time (sets the 75 ms pulse-interval floor) | 58,605–58,708 µs, n = 5 | `CLAUDE.md` §8, H-D3 |
+| Model v4 on 3,721 held-out rows, at its own threshold (p = 0.20) | recall 81.3 %, precision 64.1 % | [`model/README.md`](model/README.md) |
+| Same model at the threshold the firmware ships with (p ≈ 0.30) | recall 73.5 %, precision 69.5 % | same |
+| Training data | 37,216 rows from 60 recordings | [`data/README.md`](data/README.md) |
+
+The two latency figures use different methods and different builds; both are more than 200×
+under the 1 ms target the project set for itself. Both measure the
+inference-task-posts-result → hazard-task-wakes handoff (the "< 1 ms path" in the
+[task table](#rtos-architecture)), not end-to-end sensor-to-motor latency, which is set by
+the ~37 ms sensor frame period. The model figures come from a row-level split of the same
+recordings and are optimistic; see [Limitations](#limitations).
+
+## How it works
+
+```mermaid
+flowchart LR
+    TOF["VL53L1X ToF<br/>0x29"]
+    IMU["MPU6050 IMU<br/>0x68"]
+    DRV["DRV2605L<br/>0x5A"]
+    ERM(("ERM motor"))
+    PC["PC terminal<br/>(optional)"]
+
+    subgraph MCU["STM32N6570-DK, µT-Kernel 3.0"]
+        direction LR
+        S["Sensor task, priority 3<br/>all I2C (DMA)<br/>builds the 17-feature frame"]
+        I["Inference task, priority 2<br/>NPU model OR rule<br/>(under 80 cm and over 20 cm/s)"]
+        H["Hazard task, priority 1<br/>GPIO only<br/>urgency sets pulse interval"]
+        HB["Heartbeat, priority 10<br/>LD1 and UART status"]
+    end
+
+    TOF -- "I2C1" --> S
+    IMU -- "I2C1" --> S
+    S -- "feature frame,<br/>data_ready_sem" --> I
+    I -- "result slot,<br/>result_ready_sem" --> H
+    H -. "result_free_sem" .-> I
+    H -- "TRIG edge on PE13" --> DRV
+    S -. "I2C1: init and 1 Hz health poll" .-> DRV
+    DRV --> ERM
+    HB -. "USART1, 115200 baud" .-> PC
+```
+
+One sensor frame, end to end. Each `tk_sig_sem` wakes a higher-priority task, which runs
+immediately; the step marked ★ is the handoff the two latency figures measure.
+
+```mermaid
+sequenceDiagram
+    participant S as Sensor (priority 3)
+    participant I as Inference (priority 2)
+    participant H as Hazard (priority 1)
+    participant M as DRV2605L and motor
+
+    S->>S: read ToF and IMU over I2C1, update distance history,<br/>least-squares velocity and acceleration
+    S->>I: tk_sig_sem(data_ready_sem)
+    Note over I: preempts Sensor
+    I->>I: normalise 17 features, run the model on the NPU,<br/>OR with the distance/speed rule
+    I->>I: tk_wai_sem(result_free_sem), write result slot with seq canary
+    I->>H: ★ tk_sig_sem(result_ready_sem)
+    Note over H: preempts Inference
+    H->>H: copy slot, check seq equals seq_check
+    H->>M: on hazard, one TRIG edge (rate-limited to the urgency interval)
+    H->>I: tk_sig_sem(result_free_sem), then block again
+    I->>S: block on data_ready_sem, Sensor resumes
+    S->>S: tk_slp_tsk(20 ms)
+```
+
+## RTOS architecture
+
+Four µT-Kernel 3.0 tasks, priority = lower integer = higher priority:
+
+| Priority | Task | Waits on | Constraint |
+|---|---|---|---|
+| 1 | Hazard Alert | `result_ready_sem` | GPIO only — no I/O, no I2C, no `tm_printf`. This is the < 1 ms path. |
+| 2 | TinyML Inference | `data_ready_sem`, `result_free_sem` | Reads the sensor buffer via a paired semaphore, runs the on-device model. |
+| 3 | Sensor Acquisition | 20 ms delay per frame | Owns all I2C traffic, DMA-mode only, never blocking. |
+| 10 | Heartbeat | 1 s delay | Liveness indicator, lowest-frequency task. |
+| — | Idle | — | Busy-spin: the port's `low_pow()` is empty, so the core never sleeps and never pays a wake-up latency (see [Limitations](#limitations) for the power cost). |
+
+Producer/consumer handoffs between tasks use paired counting semaphores
+(`tk_cre_sem` / `tk_wai_sem` / `tk_sig_sem`), never raw task wakeups, so no result buffer is
+ever read half-written. The producer also stamps a `seq` / `seq_check` pair first and last
+in the result slot; a mismatch on the consumer side would be a torn read, and is counted as
+`canary_err`. The µT-Kernel API is used throughout — no FreeRTOS calls appear anywhere in
+this codebase.
+
+The Hazard Alert task's "GPIO only" rule is about how it *drives* the motor, not about the
+DRV2605L being wired for GPIO: the driver sits on I2C1, but its `IN/TRIG` pin (PE13) supports
+a hardware edge-trigger playback mode, so the priority-1 task fires a haptic pulse with a
+GPIO edge alone — no bus transaction on the hazard path. I2C to the driver is used only from
+the priority-3 task: at initialization, to configure the playback library and mode, and
+afterwards for a once-per-second health poll.
 
 ## Hardware
 
@@ -73,39 +178,6 @@ lines. The `[HB]` line appears once per second: `frames` = sensor frames process
 inferences run, `hazard` = alerts fired since boot, `canary_err` = torn-read detector (should
 stay 0).
 
-## Repository layout
-
-```
-firmware/           STM32CubeIDE project (µT-Kernel 3.0 + the sensor/actuator/inference code)
-  Appli/             Application sources, task code, µT-Kernel BSP port (mtk3_bsp2)
-  Model/             Generated NPU model artifacts (network.c/.h, network_data.hex) — the
-                     inference code the board actually runs
-  Lib/               ST middleware used by the build (partly tracked; AI_Runtime is not, see below)
-  STM32Cube_FW_N6/   ST HAL/CMSIS/BSP package (not tracked, see below)
-binaries/            ai_fsbl.hex — the first-stage bootloader flashed at 0x70000000
-model/               The trained model (.tflite) the firmware is generated from, the
-                     Neural-ART generation script and config — see model/README.md
-*.py, *.sh (root)    Data collection, aggregation, augmentation and evaluation tools
-docs/                Design docs, verification evidence, and block-by-block build history,
-                     including docs/PROJECT_DEFENSE.md (the 2026-07-12 silent-failure
-                     catalogue and verification ledger)
-docs/evidence/       Logic-analyzer captures, soak-test logs, and timing-campaign data that back
-                     every hard performance claim in this README and in docs/PROJECT_DEFENSE.md
-docs/README.md       Index: which docs describe the shipped state, which are build history
-docs/PROVENANCE.md   Where each non-original file came from, and what was removed or replaced
-CLAUDE.md            The project's own engineering rulebook — hardware map, RTOS task rules,
-                     red-zone tracking, code standards. The most detailed technical reference
-                     in this repo; read it before modifying anything under firmware/
-```
-
-Two large third-party dependencies are **not** tracked in this repository; they stay under
-ST's own license terms. Obtain them yourself and place them at these paths before building:
-
-| Path | What | Version this build used |
-|---|---|---|
-| `firmware/STM32Cube_FW_N6/` | ST HAL/CMSIS/BSP ([STM32CubeN6](https://github.com/STMicroelectronics/STM32CubeN6)), ~94 MB | **v1.2.0** |
-| `firmware/Lib/AI_Runtime/` | ST Neural-ART runtime (`ll_aton`), ~68 MB | **v1.1.3-275**, as bundled with the code generated by ST Edge AI Core 4.0.1. `network.c` refuses to compile (`#error`) against any other runtime version, so it must come from the same generation run as `firmware/Model/`. |
-
 ## Build & flash
 
 Toolchain: STM32CubeIDE ≥ 1.19.0, STM32CubeProgrammer ≥ 2.20.0 (older versions default to the
@@ -115,11 +187,12 @@ wrong Cortex-M55 flags), on Linux or Windows. The submitted build used STM32Cube
 1. Import `firmware/Appli` into STM32CubeIDE (File → Import → Existing Projects into
    Workspace). The project is named `STM32N6_MTK_Person_Detection_Appli`, a name inherited
    from the sample it was built from; that is the `<ProjName>` used below.
-2. Place the two vendored dependencies noted above at `firmware/Lib/AI_Runtime/` and
+2. Place the two vendored dependencies noted below at `firmware/Lib/AI_Runtime/` and
    `firmware/STM32Cube_FW_N6/`.
 3. Build (Debug configuration — this project has no separate Release build; the committed
    configuration has the diagnostic defines already removed and `HAZARD_CLASSIFIER_USE_NPU`
-   set, which is the shipped configuration).
+   set, which is the shipped configuration; the in-source `CSV_LOG_ENABLE` switch is still 1,
+   see [Limitations](#limitations)).
 4. Sign the output (required — an unsigned or unaligned binary boot-fails silently on this
    part). The post-build step does this automatically, calling
    `${HOME}/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/STM32_SigningTool_CLI`
@@ -141,41 +214,34 @@ wrong Cortex-M55 flags), on Linux or Windows. The submitted build used STM32Cube
 See `CLAUDE.md` §1 and §4 for the full toolchain/boot detail, including a known documentation
 drift in the upstream reference repo this project's µT-Kernel BSP port was built from.
 
-## RTOS architecture
+Two large third-party dependencies are **not** tracked in this repository; they stay under
+ST's own license terms. Obtain them yourself and place them at these paths before building:
 
-Four µT-Kernel 3.0 tasks, priority = lower integer = higher priority:
-
-| Priority | Task | Constraint |
+| Path | What | Version this build used |
 |---|---|---|
-| 1 | Hazard Alert | GPIO only — no I/O, no I2C, no `tm_printf`. This is the < 1 ms path. |
-| 2 | TinyML Inference | Reads the sensor buffer via a paired semaphore, runs the on-device model. |
-| 3 | Sensor Acquisition | Owns all I2C traffic, DMA-mode only, never blocking. |
-| 10 | Heartbeat | Liveness indicator, lowest-frequency task. |
-| — | Idle | Busy-spin: the port's `low_pow()` is empty, so the core never sleeps and never pays a wake-up latency (see "Known limitations" for the power cost). |
+| `firmware/STM32Cube_FW_N6/` | ST HAL/CMSIS/BSP ([STM32CubeN6](https://github.com/STMicroelectronics/STM32CubeN6)), ~94 MB | **v1.2.0** |
+| `firmware/Lib/AI_Runtime/` | ST Neural-ART runtime (`ll_aton`), ~68 MB | **v1.1.3-275**, as bundled with the code generated by ST Edge AI Core 4.0.1. `network.c` refuses to compile (`#error`) against any other runtime version, so it must come from the same generation run as `firmware/Model/`. |
 
-Producer/consumer handoffs between tasks use paired counting semaphores
-(`tk_cre_sem` / `tk_wai_sem` / `tk_sig_sem`), never raw task wakeups, so no result buffer is
-ever read half-written. The µT-Kernel API is used throughout — no FreeRTOS calls appear
-anywhere in this codebase.
+## Host tests and CI
 
-The Hazard Alert task's "GPIO only" rule is about how it *drives* the motor, not about the
-DRV2605L being wired for GPIO: the driver sits on I2C1, but its `IN/TRIG` pin (PE13) supports
-a hardware edge-trigger playback mode, so the priority-1 task fires a haptic pulse with a
-GPIO edge alone — no bus transaction on the hazard path. I2C is used only during
-initialization (on the priority-3 task) to configure the driver's playback library and mode.
+The decision logic can be exercised on a PC, without the board or the ARM toolchain:
 
-**Measured on hardware, two ways:**
+```
+make -C tests/host                                # C unit tests, gcc + ASan/UBSan
+python3 -m unittest discover -s tests/tools -v    # data-tool tests, standard library only
+ruff check .                                      # lint for tools/ and tests/
+```
 
-| | Method | Conditions | Worst case |
-|---|---|---|---|
-| Phase 4 (`docs/evidence/phase4/`) | Logic analyzer, GPIO pin to pin, 125 ns resolution | Synthetic sensor data, extra CPU load; 2,229 events (baseline without load: 1,776 events, same result) | **3.375 µs**, 0 missed |
-| Phase 6 (`docs/evidence/phase6/`) | Firmware DWT cycle counter at 800 MHz | Real sensors + NPU inference, 30-minute continuous soak, 43,723 events | **4.19 µs** (3,349 cycles) |
+`tests/host` compiles the firmware sources **unmodified** against small stand-in headers
+and checks the least-squares velocity estimator (including divide-by-zero and large-uptime
+cases), the urgency → pulse-interval mapping, the model-OR-rule decision with its
+boundaries, the canary, the feature-frame validity rules, and the integer classifier over
+the 3,721 held-out rows. GitHub Actions runs these plus a Markdown link check on every push
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
-In the same 30-minute soak, 48,242 frames went through the paired-semaphore handoff with zero
-torn reads (`canary_err = 0`). The two latency figures use different methods and different
-builds; both are more than 200× under 1 ms. Both measure the inference-task-posts-result →
-hazard-task-wakes handoff (the "< 1 ms path" in the task table), not end-to-end
-sensor-to-motor latency, which is set by the ~37 ms sensor frame period.
+These are logic tests. They run no scheduler and no NPU, so they say nothing about timing
+or preemption; that evidence is the hardware measurement above. Details:
+[`tests/README.md`](tests/README.md).
 
 ## The on-device model
 
@@ -193,7 +259,7 @@ Pipeline: hardware data collection → Edge Impulse (feature engineering + train
 - A small fully-connected network (17→32→16→1, sigmoid output), INT8, using only NPU-safe
   operators — no recurrent or attention layers, which fall back to the CPU silently and 10-30×
   slower on this part. The firmware's weights come from `model/haptic_sense_hazard_v4.tflite`
-  (held-out: recall 81.3 %, precision 64.1 % at p = 0.20); see `model/README.md`.
+  (held-out: recall 81.3 %, precision 64.1 % at p = 0.20); see [`model/README.md`](model/README.md).
 - Two inference paths with the same interface: an integer-only C implementation (bit-exact
   against the TFLite interpreter on 3,721 held-out rows) and the Neural-ART NPU
   (`HAZARD_CLASSIFIER_USE_NPU`, the compiled default). The NPU weight-address bug in
@@ -206,19 +272,107 @@ Pipeline: hardware data collection → Edge Impulse (feature engineering + train
   `app_tasks.c`). At close range the rule does most of the work; detection is model **or**
   rule, not purely learned.
 
-## Known limitations
+## Limitations
+
+Scope:
 
 - This is a benchtop prototype, not a wearable enclosure. Where the build diverged from the
   original plan, it is recorded in this section and in `model/README.md` (which model the
   firmware actually carries, and why its threshold and weights come from different models).
 - A single-zone ToF sensor has no directional resolution. Feedback here communicates urgency
   only, never direction — this is a deliberate scope decision, not a missing feature.
+- No power measurement was taken, and the idle loop busy-spins. The original plan's deep-sleep
+  mode was not built, because Stop/Sleep wake-up latency would threaten the < 1 ms guarantee.
+
+Model:
+
 - The model's decision threshold in `app_hazard_classifier.h` (`HAZ_PROB_THRESH_Q = -51`) was
   derived from a later model (v10) than the weights the firmware carries (v4; its own
   validated threshold is kept there as `HAZ_PROB_THRESH_Q_V4_LOCKED = -87`). See
   `model/README.md`. Hazard alerts are still produced by the rule above.
-- No power measurement was taken, and the idle loop busy-spins. The original plan's deep-sleep
-  mode was not built, because Stop/Sleep wake-up latency would threaten the < 1 ms guarantee.
+- The held-out set is a row-level 90/10 split: all 60 recordings contribute rows to both
+  sides, and consecutive rows share 9 of their 10 distance samples. The held-out recall and
+  precision are therefore optimistic compared with a split by recording
+  ([`data/README.md`](data/README.md)).
+
+Firmware, found in the November 2026 code review and **left as they are** so that the
+source still matches the contest submission:
+
+- **The `[CSV]` feature logger is still compiled in** (`CSV_LOG_ENABLE 1` in `app_tasks.c`).
+  The priority-3 sensor task prints one line of about 170 characters per frame on the
+  115200-baud UART, roughly 15 ms of polled output. That is consistent with the gap between
+  the 20 ms pacing delay and the measured ~37 ms frame period, but the two have not been
+  separated by measurement. The training data was captured at that rate, so switching the
+  logger off changes the time base of the distance-history features and needs re-validation
+  on hardware.
+- **No watchdog.** The inference task waits for the NPU in an unbounded loop; if the NPU or
+  a task hung, nothing would reset the board. The heartbeat LED stopping would be the only
+  sign.
+- **A stalled ToF sensor is detected but not acted on.** The feature frame carries a
+  FRESH / HELD / INVALID state, but the inference task does not read it: if frames stop
+  arriving, the last distance and velocity stay in place. The ToF driver has no runtime
+  re-initialisation (the DRV2605L driver does).
+- The velocity estimator is not safe across the 2³² ms (49.7-day) uptime wrap; up to five
+  frames at that instant can compute a wrong velocity.
+- The integer-only CPU inference path (not the compiled default) pairs a v10-derived logit
+  threshold with v4 weights. On the held-out rows that gives 51.8 % recall, against 81.2 %
+  at v4's own logit threshold (`tests/host/test_hazard_classifier.c`).
+- The two files replaced on 2026-09-25 ([`docs/PROVENANCE.md`](docs/PROVENANCE.md)) were
+  build-verified but not re-flashed: the unit shipped for judging carries the earlier
+  binary.
+
+Host tests cover decision logic only; nothing in CI builds or runs the firmware.
+
+## Roadmap
+
+Not started. Listed in the order they would reduce risk; each firmware item needs a
+hardware re-test before any figure in this README carries over.
+
+1. Act on sensor validity: treat an INVALID ToF state as "no hazard information", and add
+   runtime re-initialisation for the VL53L1X.
+2. Add an independent watchdog (IWDG) kicked from the heartbeat task, and bound the NPU wait.
+3. Move per-frame logging off the sensor task (or disable it), re-measure the frame rate,
+   and re-collect data at the new rate.
+4. Retrain on a split by recording, convert that one model for the NPU, and derive both
+   thresholds from the same weights with live validation.
+5. Make the velocity estimator wrap-safe.
+6. Measure power; evaluate WFI in the idle loop against the latency budget.
+7. Direction: the kit's MB1854B camera module carries a multi-zone VL53L5CX on the same bus
+   (`CLAUDE.md` §2, "Onboard upgrade path"). Not integrated.
+8. A wearable enclosure and battery power.
+
+## Repo map
+
+```
+firmware/               STM32CubeIDE project (µT-Kernel 3.0 + the sensor/actuator/inference code)
+  Appli/Core/           Application sources: app_tasks.c (the four tasks), app_i2c.c, the
+                        sensor and haptic drivers, velocity_lsq.c, app_hazard_classifier*.c
+  Appli/mtk3_bsp2/      µT-Kernel 3.0 BSP2 port (T-License)
+  Model/                Generated NPU model artifacts (network.c/.h, network_data.hex) — the
+                        inference code the board actually runs
+  Lib/                  ST middleware used by the build (partly tracked; AI_Runtime is not)
+  STM32Cube_FW_N6/      ST HAL/CMSIS/BSP package (not tracked)
+binaries/               ai_fsbl.hex — the first-stage bootloader flashed at 0x70000000
+model/                  The trained model (.tflite) the firmware is generated from, the
+                        Neural-ART generation script and config — see model/README.md
+data/                   The published datasets (training, Edge Impulse upload, held-out)
+logs/                   One raw serial recording (the other 59 are not published)
+tools/                  Data collection, aggregation, augmentation and evaluation scripts
+tests/host/             Host-side C unit tests of the firmware's decision logic
+tests/tools/            Python tests for tools/ and data/
+docs/                   Design docs, audits and verification evidence — index in docs/README.md
+docs/evidence/          Logic-analyzer captures, soak-test logs, and timing-campaign data that
+                        back every hard performance claim in this README and in
+                        docs/PROJECT_DEFENSE.md (the 2026-07-12 silent-failure catalogue and
+                        verification ledger)
+docs/dev-log/           Dated hand-offs, plans and runbooks from the build, kept as history
+docs/PROVENANCE.md      Where each non-original file came from, and what was removed or replaced
+THIRD_PARTY_NOTICES.md  Licence of each bundled component, by path
+CLAUDE.md               The project's own engineering rulebook — hardware map, RTOS task rules,
+                        red-zone tracking, code standards. The most detailed technical
+                        reference in this repo; read it before modifying anything under
+                        firmware/
+```
 
 ## License
 
@@ -242,7 +396,7 @@ before reusing anything.**
   STM32N6 sample tooling under **ST's SLA0044** and keep that license.
 - **Vendored third-party libraries**: `firmware/Lib/AI_Runtime/` and `firmware/STM32Cube_FW_N6/`
   are **not tracked in this repository at all** and remain under ST's own license terms —
-  obtain them separately (see Repository layout, above). The ST middleware that *is* tracked
+  obtain them separately (see Build & flash, above). The ST middleware that *is* tracked
   (`firmware/Lib/{Camera_Middleware,screenl,tracker,ai-postprocessing-wrapper,lib_vision_models_pp}`,
   `firmware/Appli/Lib/STSW-IMG009/`) keeps the license file shipped in each directory.
 - **ST sample-application files** under `firmware/Appli/Core/` that keep an STMicroelectronics
@@ -250,7 +404,9 @@ before reusing anything.**
   ST's STM32N6 sample application and stay under ST's terms (SLA0044, see
   `firmware/Appli/Core/Inc/LICENSE.md`). `app.c` and `app_cam.c` are excluded from the build.
 - Two files that carried an incorrect ST header (`serial_protocol.h`, `mtkernel_bsp.c`) were
-  replaced with original code on 2026-09-25 — see `docs/PROVENANCE.md`.
+  replaced with original code on 2026-09-25 — see [`docs/PROVENANCE.md`](docs/PROVENANCE.md).
+- A per-path table of every bundled component and its licence is in
+  [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 `LICENSE` covers this project's own original contribution only. It does not and cannot
 relicense the T-Licensed or ST-licensed components above; those are included or referenced

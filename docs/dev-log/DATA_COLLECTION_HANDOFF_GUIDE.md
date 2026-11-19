@@ -13,7 +13,7 @@ you want — just not in the middle of a single 45-second recording.
 2. Type exactly this, then press Enter:
 
    ```
-   cd ~/haptic-sense && bash collect_data.sh
+   cd ~/haptic-sense && bash tools/collect_data.sh
    ```
 
 3. From that point on, the program on screen will tell you exactly what to do, one step at a

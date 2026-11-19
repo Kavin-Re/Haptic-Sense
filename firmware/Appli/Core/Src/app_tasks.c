@@ -236,8 +236,13 @@
  * above. Not declared inline (this codebase does not use the keyword
  * elsewhere in this file) -- a static function this small should still be
  * inlined by the optimizer at any -O level that matters here.
+ *
+ * NOT under CSV_LOG_ENABLE (moved out 2026-11-19): inference_task_fct()
+ * calls norm1000() unconditionally to normalise the classifier input, so
+ * guarding the definition with the logger switch made CSV_LOG_ENABLE 0 a
+ * compile error. With CSV_LOG_ENABLE 1 (the committed value) the
+ * preprocessed source is unchanged.
  */
-#if CSV_LOG_ENABLE
 static W norm1000(W raw, W offset, W scale)
 {
 	W n = ((raw - offset) * 1000) / scale;
@@ -246,6 +251,7 @@ static W norm1000(W raw, W offset, W scale)
 	return n;
 }
 
+#if CSV_LOG_ENABLE
 /*
  * Label-shift ring buffer (Block 6 G-2). One row = one raw feature frame
  * plus its tri-state validity, buffered CSV_RING_LEN cycles deep so row t

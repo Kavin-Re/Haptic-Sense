@@ -1,0 +1,19 @@
+# Lint configuration for the host-side Python tools (tools/, tests/tools/).
+# Run: ruff check .
+#
+# docs/evidence/ is excluded on purpose: the analysis scripts there are part
+# of the dated measurement record behind the published figures and are kept
+# byte-for-byte as they were run.
+line-length = 120
+target-version = "py39"
+extend-exclude = ["firmware", "docs/evidence"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[lint.per-file-ignores]
+# Frozen records of how the 2026-09-18/19 datasets were generated: kept
+# statement-for-statement (seeded RNG, order-sensitive), so only real
+# defects are fixed there, not style.
+"tools/gen_*.py" = ["E501", "E701", "E702"]
+"tools/eval_v10.py" = ["E501"]

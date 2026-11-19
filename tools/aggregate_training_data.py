@@ -4,15 +4,29 @@ Haptic-Sense Block 6 -> Block 7 aggregation script.
 Reads all real collection log files in logs/, keeps the correct final
 version of each of the 60 surface/angle/speed combos (skipping known-bad
 or superseded attempts), filters to FRESH rows only (ivs==165 and
-tvs==165, per DATA_COLLECTION_PROTOCOL_20260916.md Sec 8), and writes
-one flat training CSV with provenance columns plus the 17 features + label.
-"""
-import re, csv, glob, os, sys
-from collections import defaultdict, Counter
+tvs==165, per docs/dev-log/DATA_COLLECTION_PROTOCOL_20260916.md Sec 8), and
+writes one flat training CSV with provenance columns plus the 17 features +
+label.
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-LOGDIR = os.path.join(SCRIPT_DIR, "logs")
-OUTFILE = os.path.join(SCRIPT_DIR, "training_data_20260918.csv")
+usage: python3 tools/aggregate_training_data.py [--logdir DIR] [--out FILE] [--force]
+
+The published data/training_data_20260918.csv was built from 60 recordings,
+of which only one (logs/csv_hand_straight_normal_195036.log) is in this
+repository. Re-running on the repository's logs/ therefore reproduces only
+that recording's rows, so the script refuses to overwrite an existing
+output file unless --force is given.
+"""
+import argparse
+import csv
+import glob
+import os
+import re
+import sys
+from collections import defaultdict
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LOGDIR = os.path.join(REPO_ROOT, "logs")
+OUTFILE = os.path.join(REPO_ROOT, "data", "training_data_20260918.csv")
 
 # Known-bad / superseded files -- excluded in favor of their _REDO or later attempt.
 EXCLUDE = {
@@ -43,8 +57,18 @@ def parse_filename(fname):
         return None, None, None
     return m.group(1), m.group(2), m.group(3)
 
-def main():
-    all_files = sorted(glob.glob(os.path.join(LOGDIR, "csv_*.log")))
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
+    ap.add_argument("--logdir", default=LOGDIR, help="directory holding csv_*.log captures")
+    ap.add_argument("--out", default=OUTFILE, help="CSV file to write")
+    ap.add_argument("--force", action="store_true", help="overwrite --out if it already exists")
+    args = ap.parse_args(argv)
+    logdir, outfile = args.logdir, args.out
+    if os.path.exists(outfile) and not args.force:
+        sys.exit(f"{outfile} already exists; pass --force to overwrite it "
+                 f"(the published file was built from 60 recordings, see --help)")
+
+    all_files = sorted(glob.glob(os.path.join(logdir, "csv_*.log")))
     used_files = [f for f in all_files if os.path.basename(f) not in EXCLUDE]
     excluded_present = [f for f in all_files if os.path.basename(f) in EXCLUDE]
 
@@ -67,7 +91,7 @@ def main():
 
         file_csv_lines = 0
         file_fresh = 0
-        with open(fpath, "r", errors="replace") as fh:
+        with open(fpath, errors="replace") as fh:
             for line in fh:
                 if "[CSV]" not in line:
                     continue
@@ -94,7 +118,7 @@ def main():
 
     # Write output CSV
     header = ["source_file","surface","angle","speed"] + FEATURE_COLS + ["label"]
-    with open(OUTFILE, "w", newline="") as out:
+    with open(outfile, "w", newline="") as out:
         w = csv.writer(out)
         w.writerow(header)
         w.writerows(rows_out)
@@ -138,9 +162,13 @@ def main():
     print()
 
     print(f"Total raw [CSV] rows scanned:  {total_lines_seen}")
-    print(f"Total FRESH rows kept:         {total_fresh_kept}  ({100.0*total_fresh_kept/total_lines_seen:.1f}%)")
-    print(f"  hazard (label=1):            {hazard_count}  ({100.0*hazard_count/total_fresh_kept:.1f}%)")
-    print(f"  no-hazard (label=0):         {nohazard_count}  ({100.0*nohazard_count/total_fresh_kept:.1f}%)")
+    # max(..., 1): an empty or [CSV]-free log directory must report 0 %, not crash
+    pct_fresh = 100.0 * total_fresh_kept / max(total_lines_seen, 1)
+    pct_haz = 100.0 * hazard_count / max(total_fresh_kept, 1)
+    pct_nohaz = 100.0 * nohazard_count / max(total_fresh_kept, 1)
+    print(f"Total FRESH rows kept:         {total_fresh_kept}  ({pct_fresh:.1f}%)")
+    print(f"  hazard (label=1):            {hazard_count}  ({pct_haz:.1f}%)")
+    print(f"  no-hazard (label=0):         {nohazard_count}  ({pct_nohaz:.1f}%)")
     print()
 
     print("Per-file FRESH retention (flag anything under 50%):")
@@ -150,7 +178,7 @@ def main():
         print(f"  {fname:45s} {surface:7s} {angle:9s} {speed:7s} csv={csvn:5d} fresh={fresh:5d} ({pct:5.1f}%){flag}")
 
     print()
-    print(f"Output written: {OUTFILE}")
+    print(f"Output written: {outfile}")
     print(f"Output rows: {len(rows_out)}")
 
 if __name__ == "__main__":

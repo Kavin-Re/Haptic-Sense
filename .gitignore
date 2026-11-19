@@ -19,8 +19,14 @@ firmware/Lib/AI_Runtime/
 # not tracked in git history
 firmware/STM32Cube_FW_N6/
 
-# Python bytecode (analysis scripts)
+# Python bytecode and tool caches (analysis scripts, host tests)
 __pycache__/
+*.pyc
+.ruff_cache/
+.venv/
+
+# Host unit-test build output (tests/host/Makefile)
+tests/host/build/
 
 # scratch bundle from the 9-10 Jul session: duplicate PDFs and a STALE
 # copy of app_i2c.c. Never track it - duplicate source trees are how the
@@ -46,6 +52,11 @@ held_out_*.csv
 held_out_v*_scored.csv
 ei_upload_*.csv
 boost_angle_labeled.csv
+# exception: the three published datasets (see data/README.md). They are
+# tracked; these lines only stop the patterns above from hiding that.
+!/data/training_data_20260918.csv
+!/data/ei_upload_training_20260918.csv
+!/data/held_out_test_vectors_20260918.csv
 
 # Scratch/diagnostic logs — serial captures, NPU diagnostic runs, soak-test
 # logs dumped at repo root and under logs/. Anchored to root + logs/ only
