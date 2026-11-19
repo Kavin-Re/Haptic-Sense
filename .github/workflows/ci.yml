@@ -22,7 +22,7 @@ jobs:
     name: Host C unit tests (gcc + ASan/UBSan)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build and run
         run: make -C tests/host
       - name: Build and run without sanitizers
@@ -32,7 +32,7 @@ jobs:
     name: Python tools (ruff + unittest)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -49,7 +49,7 @@ jobs:
     name: Markdown links
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Relative links between this project's own documents: must always pass.
       - name: Local links (offline)
         uses: lycheeverse/lychee-action@v2
