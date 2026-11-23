@@ -6,7 +6,13 @@
 ![Board: STM32N6570-DK](https://img.shields.io/badge/board-STM32N6570--DK-03234b)
 ![Status: benchtop prototype](https://img.shields.io/badge/status-benchtop%20prototype-yellow)
 
-**An open-source, AI-driven predictive spatial-awareness wearable for visually impaired users.**
+> **Status: frozen, 2026-11-23.** The contest entry is submitted and no new features are planned.
+> **Not done:** the firmware defects documented under [Limitations](#limitations) are left unfixed, so
+> that the source still matches the submission.
+
+**Benchtop prototype of an obstacle-urgency alert meant for visually impaired users: a time-of-flight sensor
+and an IMU on an STM32N6 under µT-Kernel 3.0, with a haptic motor that pulses faster as an obstacle closes.
+It gives urgency, not direction, and has not yet been tried by a visually impaired user.**
 
 TRON Forum Programming Contest 2026 — Entry ID **34476** — RTOS Application category (Students,
 individual entry) — [tron.org](https://www.tron.org/programming_contest-2026/)
@@ -324,6 +330,8 @@ source still matches the contest submission:
 Host tests cover decision logic only; nothing in CI builds or runs the firmware.
 
 ## Roadmap
+
+Frozen on 2026-11-23; the items below are not scheduled.
 
 Not started. Listed in the order they would reduce risk; each firmware item needs a
 hardware re-test before any figure in this README carries over.
